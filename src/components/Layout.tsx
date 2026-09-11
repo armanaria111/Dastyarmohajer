@@ -16,7 +16,8 @@ import {
   Megaphone,
   Star,
   ShieldCheck,
-  FileSpreadsheet
+  FileSpreadsheet,
+  ExternalLink
 } from "lucide-react";
 import { auth } from "../firebase";
 import { signOut } from "firebase/auth";
@@ -36,19 +37,27 @@ export default function Layout({ toggleTheme, theme, onLogout }: { toggleTheme: 
   };
 
   const navItems = [
-    { name: "داشبورد و آمار", path: "/", icon: <LayoutDashboard size={20} /> },
-    { name: "دفاتر کفالت", path: "/branches", icon: <Building2 size={20} /> },
-    { name: "سفارت‌ها و کنسولگری", path: "/embassies", icon: <Landmark size={20} /> },
-    { name: "نظرات و رضایت دفاتر", path: "/feedbacks", icon: <Star size={20} /> },
-    { name: "اسناد و مدارک مفقودی", path: "/lost-documents", icon: <ShieldCheck size={20} /> },
-    { name: "استعلام تذکره‌های چاپ‌شده", path: "/printed-tazkiras", icon: <FileSpreadsheet size={20} /> },
-    { name: "درخواست‌ها و نوبت‌دهی", path: "/requests", icon: <ClipboardList size={20} /> },
-    { name: "انتشار اخبار در کانال‌ها", path: "/broadcast", icon: <Megaphone size={20} /> },
-    { name: "سایت‌های خدماتی", path: "/websites", icon: <Globe size={20} /> },
-    { name: "سوالات متداول (FAQ)", path: "/faqs", icon: <HelpCircle size={20} /> },
-    { name: "مدیریت و اتصال ربات‌ها", path: "/bots", icon: <Bot size={20} /> },
-    { name: "شبیه‌ساز پیام‌رسان‌ها", path: "/simulator", icon: <Smartphone size={20} /> },
+    { name: "داشبورد و آمار", path: "/admin", icon: <LayoutDashboard size={20} /> },
+    { name: "تنظیمات لندینگ و پیوندها", path: "/admin/landing-settings", icon: <Globe size={20} /> },
+    { name: "دفاتر کفالت", path: "/admin/branches", icon: <Building2 size={20} /> },
+    { name: "سفارت‌ها و کنسولگری", path: "/admin/embassies", icon: <Landmark size={20} /> },
+    { name: "نظرات و رضایت دفاتر", path: "/admin/feedbacks", icon: <Star size={20} /> },
+    { name: "اسناد و مدارک مفقودی", path: "/admin/lost-documents", icon: <ShieldCheck size={20} /> },
+    { name: "استعلام تذکره‌های چاپ‌شده", path: "/admin/printed-tazkiras", icon: <FileSpreadsheet size={20} /> },
+    { name: "درخواست‌ها و نوبت‌دهی", path: "/admin/requests", icon: <ClipboardList size={20} /> },
+    { name: "انتشار اخبار در کانال‌ها", path: "/admin/broadcast", icon: <Megaphone size={20} /> },
+    { name: "سایت‌های خدماتی", path: "/admin/websites", icon: <Globe size={20} /> },
+    { name: "سوالات متداول (FAQ)", path: "/admin/faqs", icon: <HelpCircle size={20} /> },
+    { name: "مدیریت و اتصال ربات‌ها", path: "/admin/bots", icon: <Bot size={20} /> },
+    { name: "شبیه‌ساز پیام‌رسان‌ها", path: "/admin/simulator", icon: <Smartphone size={20} /> },
   ];
+
+  const isNavActive = (path: string) => {
+    if (path === "/admin") {
+      return location.pathname === "/admin" || location.pathname === "/admin/";
+    }
+    return location.pathname.startsWith(path);
+  };
 
   return (
     <div dir="rtl" className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans transition-colors duration-200 flex">
@@ -67,7 +76,7 @@ export default function Layout({ toggleTheme, theme, onLogout }: { toggleTheme: 
               to={item.path}
               className={clsx(
                 "flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-colors text-xs font-bold",
-                location.pathname === item.path
+                isNavActive(item.path)
                   ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
                   : "hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"
               )}
@@ -78,6 +87,15 @@ export default function Layout({ toggleTheme, theme, onLogout }: { toggleTheme: 
           ))}
         </nav>
         <div className="p-3 border-t border-gray-200 dark:border-gray-700 space-y-1.5">
+          <a
+            href="/"
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center justify-between px-3.5 py-2 w-full rounded-xl bg-slate-50 dark:bg-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold transition-all border border-slate-200 dark:border-slate-600"
+          >
+            <span>مشاهده سایت عمومی (لندینگ)</span>
+            <ExternalLink size={14} />
+          </a>
           <button
             onClick={toggleTheme}
             className="flex items-center gap-3 px-3.5 py-2 w-full rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition-colors text-xs font-bold"
@@ -99,7 +117,10 @@ export default function Layout({ toggleTheme, theme, onLogout }: { toggleTheme: 
       <div className="flex-1 flex flex-col min-w-0">
         {/* Mobile Header */}
         <header className="md:hidden flex items-center justify-between p-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
-          <h1 className="text-lg font-bold text-blue-600 dark:text-blue-400">دستیار مهاجر</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-base font-black text-blue-600 dark:text-blue-400">دستیار مهاجر</h1>
+            <span className="text-[10px] bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded text-slate-500 font-bold">پنل ادمین</span>
+          </div>
           <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="p-2">
             {mobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
           </button>
@@ -121,7 +142,7 @@ export default function Layout({ toggleTheme, theme, onLogout }: { toggleTheme: 
                     onClick={() => setMobileMenuOpen(false)}
                     className={clsx(
                       "flex items-center gap-3 px-4 py-2.5 rounded-xl transition-colors text-xs font-bold",
-                      location.pathname === item.path
+                      isNavActive(item.path)
                         ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
                         : "hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"
                     )}
@@ -132,6 +153,15 @@ export default function Layout({ toggleTheme, theme, onLogout }: { toggleTheme: 
                 ))}
               </nav>
               <div className="pt-3 border-t border-gray-200 dark:border-gray-700 space-y-1">
+                <a
+                  href="/"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center justify-between px-4 py-2 w-full rounded-xl bg-slate-50 dark:bg-slate-700/50 text-slate-700 dark:text-slate-300 text-xs font-bold"
+                >
+                  <span>سایت عمومی</span>
+                  <ExternalLink size={14} />
+                </a>
                 <button
                   onClick={toggleTheme}
                   className="flex items-center gap-3 px-4 py-2 w-full rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs font-bold"

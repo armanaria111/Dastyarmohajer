@@ -1,105 +1,97 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { Lock, User, ShieldCheck, ArrowRight } from "lucide-react";
+import { Link } from "react-router-dom";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "../firebase";
-import { Lock, User, ShieldCheck, Sparkles } from "lucide-react";
+import { getStoredAdminCredentials, syncAdminCredsFromCloud } from "../data/landingSettings";
 
 interface LoginProps {
   onLoginSuccess?: () => void;
 }
 
 export default function Login({ onLoginSuccess }: LoginProps) {
-  const [username, setUsername] = useState("admin");
-  const [password, setPassword] = useState("admin");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    // Attempt background sync of updated admin credentials from cloud if available
+    syncAdminCredsFromCloud();
+  }, []);
 
   const handleLogin = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setError("");
     setLoading(true);
 
-    const cleanUsername = username.trim().toLowerCase();
+    const cleanUsername = username.trim();
     const cleanPassword = password.trim();
 
-    // Check test admin credentials (admin / admin or admin@... / admin)
+    if (!cleanUsername || !cleanPassword) {
+      setError("لطفاً نام کاربری و رمز عبور را وارد نمایید.");
+      setLoading(false);
+      return;
+    }
+
+    const currentCreds = getStoredAdminCredentials();
+
+    // 1. Check against custom admin credentials (default: admin / admin, editable from admin panel)
     if (
-      (cleanUsername === "admin" || cleanUsername === "admin@example.com" || cleanUsername === "admin@admin.com") &&
-      (cleanPassword === "admin" || cleanPassword === "admin123" || cleanPassword === "password123")
+      cleanUsername.toLowerCase() === currentCreds.username.toLowerCase() &&
+      cleanPassword === currentCreds.password
     ) {
       setTimeout(() => {
         setLoading(false);
         if (onLoginSuccess) {
           onLoginSuccess();
         }
-      }, 300);
+      }, 250);
       return;
     }
 
-    // Otherwise attempt Firebase Auth
+    // 2. Also check Firebase Auth as fallback if configured
     try {
-      const email = cleanUsername.includes("@") ? cleanUsername : `${cleanUsername}@example.com`;
+      const email = cleanUsername.includes("@") ? cleanUsername : `${cleanUsername}@dastyar.internal`;
       await signInWithEmailAndPassword(auth, email, cleanPassword);
       if (onLoginSuccess) {
         onLoginSuccess();
       }
     } catch {
-      setError("نام کاربری یا رمز عبور اشتباه است. (برای تست می‌توانید از admin و admin استفاده کنید)");
+      setError("نام کاربری یا کلمه عبور وارد شده نادرست است.");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleQuickTestLogin = () => {
-    setUsername("admin");
-    setPassword("admin");
-    setError("");
-    if (onLoginSuccess) {
-      onLoginSuccess();
-    }
-  };
-
   return (
-    <div dir="rtl" className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 transition-colors p-4">
-      <div className="bg-white dark:bg-gray-800 p-6 sm:p-8 rounded-2xl shadow-xl w-full max-w-md border border-gray-100 dark:border-gray-700">
-        <div className="text-center mb-6">
-          <div className="inline-flex p-3 bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 rounded-2xl mb-3">
-            <ShieldCheck size={32} />
+    <div dir="rtl" className="min-h-screen flex items-center justify-center bg-slate-900 text-slate-100 transition-colors p-4">
+      <div className="bg-slate-800/90 backdrop-blur-md p-6 sm:p-8 rounded-3xl shadow-2xl w-full max-w-md border border-slate-700 space-y-6">
+        <div className="text-center">
+          <div className="inline-flex p-3.5 bg-blue-600/20 text-blue-400 rounded-2xl mb-3 border border-blue-500/30 shadow-inner">
+            <ShieldCheck size={36} />
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-blue-600 dark:text-blue-400 mb-2">دستیار مهاجر</h1>
-          <p className="text-gray-500 dark:text-gray-400 text-sm">پنل مدیریت محتوا و اتصال به ربات‌ها</p>
-        </div>
-
-        {/* Quick Test Info Box for Mobile */}
-        <div className="mb-6 p-4 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-right">
-          <div className="flex items-center gap-2 text-blue-700 dark:text-blue-300 font-bold text-sm mb-1">
-            <Sparkles size={16} />
-            <span>ورود آزمایشی سریع (موبایل / دسکتاپ)</span>
-          </div>
-          <p className="text-xs text-blue-600 dark:text-blue-300/80 mb-3">
-            نام کاربری: <span className="font-mono font-bold bg-white dark:bg-gray-800 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-700">admin</span> | 
-            رمز عبور: <span className="font-mono font-bold bg-white dark:bg-gray-800 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-700">admin</span>
+          <h1 className="text-2xl font-black text-white mb-1.5">
+            ورود به پنل مدیریت
+          </h1>
+          <p className="text-slate-400 text-xs font-medium">
+            دستیار مهاجر — سامانه خدمات کنسولی و دفاتر کفالت
           </p>
-          <button
-            type="button"
-            onClick={handleQuickTestLogin}
-            className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold shadow transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-          >
-            <Sparkles size={16} />
-            <span>ورود با یک کلیک (تست مدیر)</span>
-          </button>
         </div>
 
         {error && (
-          <div className="bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 p-3 rounded-lg text-sm mb-6 text-center border border-red-100 dark:border-red-800 leading-relaxed">
+          <div className="bg-red-500/10 text-red-300 p-3.5 rounded-2xl text-xs text-center border border-red-500/30 leading-relaxed font-bold">
             {error}
           </div>
         )}
 
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">نام کاربری یا ایمیل مدیر</label>
+            <label className="block text-xs font-bold text-slate-300 mb-1.5">
+              نام کاربری مدیر (Username)
+            </label>
             <div className="relative">
-              <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-gray-400">
+              <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-slate-400">
                 <User size={18} />
               </div>
               <input
@@ -107,17 +99,20 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required
-                className="block w-full pl-3 pr-10 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
-                placeholder="admin"
+                autoFocus
+                className="block w-full pl-3 pr-11 py-3 border border-slate-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-slate-900/80 text-white placeholder:text-slate-500 text-xs font-mono transition-all"
+                placeholder="نام کاربری..."
                 dir="ltr"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">رمز عبور</label>
+            <label className="block text-xs font-bold text-slate-300 mb-1.5">
+              کلمه عبور (Password)
+            </label>
             <div className="relative">
-              <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-gray-400">
+              <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-slate-400">
                 <Lock size={18} />
               </div>
               <input
@@ -125,8 +120,8 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="block w-full pl-3 pr-10 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white transition-colors"
-                placeholder="admin"
+                className="block w-full pl-3 pr-11 py-3 border border-slate-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-slate-900/80 text-white placeholder:text-slate-500 text-xs font-mono transition-all"
+                placeholder="کلمه عبور..."
                 dir="ltr"
               />
             </div>
@@ -135,11 +130,21 @@ export default function Login({ onLoginSuccess }: LoginProps) {
           <button
             type="submit"
             disabled={loading}
-            className="w-full flex justify-center items-center py-3.5 px-4 border border-transparent rounded-xl shadow-sm text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors disabled:opacity-50 min-h-[44px]"
+            className="w-full flex justify-center items-center py-3.5 px-4 rounded-xl shadow-lg shadow-blue-600/30 text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all disabled:opacity-50 min-h-[44px]"
           >
-            {loading ? "درحال بررسی..." : "ورود به سیستم"}
+            {loading ? "در حال بررسی اعتبار..." : "ورود به کنترل‌پنل"}
           </button>
         </form>
+
+        <div className="pt-2 text-center">
+          <Link
+            to="/"
+            className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition-colors"
+          >
+            <ArrowRight size={14} />
+            <span>بازگشت به صفحه اصلی</span>
+          </Link>
+        </div>
       </div>
     </div>
   );

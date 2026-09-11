@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase";
 import Layout from "./components/Layout";
+import LandingPage from "./pages/LandingPage";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Branches from "./pages/Branches";
@@ -16,6 +17,7 @@ import Broadcast from "./pages/Broadcast";
 import Feedbacks from "./pages/Feedbacks";
 import LostDocuments from "./pages/LostDocuments";
 import PrintedTazkira from "./pages/PrintedTazkira";
+import LandingSettings from "./pages/LandingSettings";
 
 export default function App() {
   const [isAdmin, setIsAdmin] = useState<boolean>(() => {
@@ -32,7 +34,7 @@ export default function App() {
       }
       setLoading(false);
     });
-    
+
     // Check saved theme
     const savedTheme = localStorage.getItem("theme");
     if (savedTheme === "dark") {
@@ -70,17 +72,48 @@ export default function App() {
   };
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100">درحال بارگذاری...</div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white font-sans">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+          <span className="text-xs text-slate-400">در حال راه‌اندازی سامانه دستیار مهاجر...</span>
+        </div>
+      </div>
+    );
   }
 
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/login" element={isAdmin ? <Navigate to="/" /> : <Login onLoginSuccess={handleLoginSuccess} />} />
-        
-        {/* Protected Routes */}
-        <Route path="/" element={isAdmin ? <Layout toggleTheme={toggleTheme} theme={theme} onLogout={handleLogout} /> : <Navigate to="/login" />}>
+        {/* 1. Public Landing Page for all visitors */}
+        <Route path="/" element={<LandingPage />} />
+
+        {/* 2. Secret Admin Entry Paths (/Arman and /arman) */}
+        <Route
+          path="/Arman"
+          element={isAdmin ? <Navigate to="/admin" replace /> : <Login onLoginSuccess={handleLoginSuccess} />}
+        />
+        <Route
+          path="/arman"
+          element={isAdmin ? <Navigate to="/admin" replace /> : <Login onLoginSuccess={handleLoginSuccess} />}
+        />
+
+        {/* Hide default /login path - redirects quietly to home */}
+        <Route path="/login" element={<Navigate to="/" replace />} />
+
+        {/* 3. Protected Admin Panel Routes under /admin */}
+        <Route
+          path="/admin"
+          element={
+            isAdmin ? (
+              <Layout toggleTheme={toggleTheme} theme={theme} onLogout={handleLogout} />
+            ) : (
+              <Navigate to="/Arman" replace />
+            )
+          }
+        >
           <Route index element={<Dashboard />} />
+          <Route path="landing-settings" element={<LandingSettings />} />
           <Route path="branches" element={<Branches />} />
           <Route path="embassies" element={<Embassies />} />
           <Route path="feedbacks" element={<Feedbacks />} />
@@ -93,6 +126,9 @@ export default function App() {
           <Route path="bots" element={<BotsManagement />} />
           <Route path="simulator" element={<BotSimulator />} />
         </Route>
+
+        {/* Fallback unknown routes to Landing */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );
