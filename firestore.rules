@@ -1,0 +1,97 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128;
+    }
+
+    // Public directories & reference data (read by anyone/bots, manage by authenticated admin or fallback)
+    match /branches/{branchId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /embassies/{embassyId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /websites/{websiteId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /faqs/{faqId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Broadcasts and channel configurations
+    match /broadcasts/{broadcastId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /broadcast_categories/{catId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /broadcast_channels/{chanId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Bot configurations & analytics
+    match /bot_configs/{configId} {
+      allow read, write: if true;
+    }
+
+    match /bot_users/{userId} {
+      allow read, write: if true;
+    }
+
+    match /analytics/{analyticId} {
+      allow read, write: if true;
+    }
+
+    // User requests and appointment forms
+    match /requests/{requestId} {
+      allow read, write: if true;
+    }
+
+    // Kefalat Office Feedbacks and Satisfaction Surveys
+    match /office_feedbacks/{feedbackId} {
+      allow read, write: if true;
+    }
+
+    // Found and Lost Documents Registry
+    match /found_documents/{docId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /lost_document_alerts/{alertId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Printed Electronic Tazkira Distribution Records
+    match /printed_tazkiras/{tazkiraId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Catch-all
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}
+

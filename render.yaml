@@ -1,0 +1,27 @@
+# ====================================================================
+# پیکربندی استقرار مستقیم روی Render (Render Blueprint Specification)
+# مستندات: https://render.com/docs/blueprint-spec
+# ====================================================================
+
+services:
+  - type: web
+    name: tazkira-system
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false
+      - key: APP_URL
+        sync: false

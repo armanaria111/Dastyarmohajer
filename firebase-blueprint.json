@@ -1,0 +1,185 @@
+{
+  "entities": {
+    "branches": {
+      "title": "Kefalat Offices",
+      "description": "Information about Kefalat offices for immigrants",
+      "properties": {
+        "code": { "type": "string" },
+        "name": { "type": "string" },
+        "provinceCity": { "type": "string" },
+        "neighborhood": { "type": "string" },
+        "address": { "type": "string" },
+        "phone": { "type": "string" },
+        "locationUrl": { "type": "string" },
+        "workingHours": { "type": "string" },
+        "description": { "type": "string" }
+      }
+    },
+    "embassies": {
+      "title": "Embassies",
+      "description": "Embassies and consulates",
+      "properties": {
+        "name": { "type": "string" },
+        "address": { "type": "string" },
+        "phone": { "type": "string" },
+        "website": { "type": "string" },
+        "description": { "type": "string" }
+      }
+    },
+    "websites": {
+      "title": "Service Websites",
+      "description": "Government and service websites for immigrants",
+      "properties": {
+        "name": { "type": "string" },
+        "url": { "type": "string" },
+        "description": { "type": "string" }
+      }
+    },
+    "faqs": {
+      "title": "Frequently Asked Questions",
+      "description": "Questions and answers for bot and web",
+      "properties": {
+        "question": { "type": "string" },
+        "answer": { "type": "string" },
+        "language": { "type": "string" }
+      }
+    },
+    "requests": {
+      "title": "Online Requests",
+      "description": "User requests for appointments and tracking",
+      "properties": {
+        "trackingCode": { "type": "string" },
+        "applicantName": { "type": "string" },
+        "requestType": { "type": "string" },
+        "status": { "type": "string" },
+        "adminNotes": { "type": "string" },
+        "createdAt": { "type": "timestamp" }
+      }
+    },
+    "broadcasts": {
+      "title": "News Broadcasts",
+      "description": "Published announcements across 7 messenger channels",
+      "properties": {
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "category": { "type": "string" },
+        "targetProvince": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "mediaType": { "type": "string" },
+        "mediaUrl": { "type": "string" },
+        "mediaName": { "type": "string" },
+        "mediaSize": { "type": "string" },
+        "linkUrl": { "type": "string" },
+        "targetPlatforms": { "type": "array" },
+        "status": { "type": "string" },
+        "views": { "type": "number" },
+        "createdAt": { "type": "timestamp" }
+      }
+    },
+    "broadcast_categories": {
+      "title": "Broadcast Categories",
+      "description": "Dynamic categories for news and circulars",
+      "properties": {
+        "name": { "type": "string" },
+        "createdAt": { "type": "timestamp" }
+      }
+    },
+    "broadcast_channels": {
+      "title": "Messenger Channels",
+      "description": "Configured channel links and handles",
+      "properties": {
+        "platform": { "type": "string" },
+        "name": { "type": "string" },
+        "channelId": { "type": "string" },
+        "inviteLink": { "type": "string" },
+        "createdAt": { "type": "timestamp" }
+      }
+    },
+    "bot_users": {
+      "title": "Bot Users",
+      "description": "Real unique bot members tracked across 7 messengers",
+      "properties": {
+        "userId": { "type": "string" },
+        "platform": { "type": "string" },
+        "province": { "type": "string" },
+        "lastActive": { "type": "timestamp" },
+        "joinedAt": { "type": "timestamp" }
+      }
+    },
+    "analytics": {
+      "title": "Analytics Events",
+      "description": "Real messages and interaction logs",
+      "properties": {
+        "platform": { "type": "string" },
+        "senderId": { "type": "string" },
+        "event": { "type": "string" },
+        "textPreview": { "type": "string" },
+        "timestamp": { "type": "timestamp" }
+      }
+    },
+    "office_feedbacks": {
+      "title": "Office Feedbacks and Reviews",
+      "description": "Ratings and feedback for Kefalat offices",
+      "properties": {
+        "officeCode": { "type": "string" },
+        "officeName": { "type": "string" },
+        "rating": { "type": "number" },
+        "comment": { "type": "string" },
+        "userName": { "type": "string" },
+        "userPhone": { "type": "string" },
+        "platform": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "timestamp" }
+      }
+    },
+    "found_documents": {
+      "title": "Found Documents",
+      "description": "Documents found and held at Kefalat offices or reported by finders",
+      "properties": {
+        "docType": { "type": "string" },
+        "ownerName": { "type": "string" },
+        "docNumber": { "type": "string" },
+        "province": { "type": "string" },
+        "city": { "type": "string" },
+        "holdingLocation": { "type": "string" },
+        "contactPhone": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "notes": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "timestamp" }
+      }
+    },
+    "lost_document_alerts": {
+      "title": "Lost Document Alerts",
+      "description": "Documents reported lost by users for auto-notification",
+      "properties": {
+        "docType": { "type": "string" },
+        "ownerName": { "type": "string" },
+        "docNumber": { "type": "string" },
+        "contactPhone": { "type": "string" },
+        "platform": { "type": "string" },
+        "province": { "type": "string" },
+        "matched": { "type": "boolean" },
+        "matchedDocId": { "type": "string" },
+        "createdAt": { "type": "timestamp" }
+      }
+    },
+    "printed_tazkiras": {
+      "title": "Printed Electronic Tazkiras",
+      "description": "Printed Electronic National ID (Tazkira) distribution list and box information",
+      "properties": {
+        "rowNumber": { "type": "number" },
+        "fullName": { "type": "string" },
+        "fatherName": { "type": "string" },
+        "surname": { "type": "string" },
+        "province": { "type": "string" },
+        "boxNumber": { "type": "string" },
+        "remarks": { "type": "string" },
+        "batchDate": { "type": "string" },
+        "status": { "type": "string" },
+        "importedAt": { "type": "timestamp" },
+        "sourceFile": { "type": "string" }
+      }
+    }
+  }
+}
