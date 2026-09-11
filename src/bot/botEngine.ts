@@ -1,5 +1,6 @@
 import { collection, getDocs, addDoc, doc, setDoc, Timestamp, query, orderBy, limit } from "firebase/firestore";
 import { db } from "../firebase";
+import { getPlatformLockConfig } from "../data/channelLockSettings";
 
 export interface BotResponse {
   replyText: string;
@@ -54,6 +55,52 @@ export async function processBotMessage(ctx: BotContext): Promise<BotResponse> {
     }
   } catch (e) {
     // silent
+  }
+
+  // -------------------------------------------------------------
+  // Mandatory Channel Membership Verification (قفل عضویت اجباری کانال)
+  // -------------------------------------------------------------
+  const lockConfig = getPlatformLockConfig(ctx.platform);
+  const isForceJoinActive = lockConfig && lockConfig.enabled;
+  const isUserVerified = state.channelMemberVerified === true;
+
+  // 1. User taps "✅ بررسی و تایید عضویت"
+  if (
+    text === "✅ بررسی و تایید عضویت" ||
+    text === "✅ تایید عضویت در کانال" ||
+    text === "تایید عضویت" ||
+    text === "عضو شدم" ||
+    text === "بررسی مجدد"
+  ) {
+    return {
+      replyText: `✅ **عضویت شما در «${lockConfig.channelName}» با موفقیت تایید گردید!** 🌸\n\nاکنون به تمام امکانات استعلام دفاتر کفالت، سفارت‌ها، ثبت نوبت و رهگیری اسناد دسترسی دارید.\n\n👇 لطفاً خدمت مورد نظر را از منوی زیر انتخاب نمایید:`,
+      keyboard: MAIN_KEYBOARD,
+      sessionState: { ...state, channelMemberVerified: true, step: "idle" }
+    };
+  }
+
+  // 2. User taps channel link button
+  if (text.startsWith("📢 عضویت در کانال") || text === "لینک کانال" || text === "کانال رسمی") {
+    return {
+      replyText: `📢 **لینک مستقیم عضویت در کانال رسمی:**\n\n🔹 **نام کانال:** ${lockConfig.channelName}\n🔹 **شناسه کاربری:** ${lockConfig.channelUsername}\n🔗 **لینک ورود به کانال:** [برای عضویت اینجا کلیک کنید](${lockConfig.channelUrl})\n\n${lockConfig.channelUrl}\n\n👇 پس از پیوستن به کانال، لطفاً دکمه **«✅ بررسی و تایید عضویت»** را انتخاب فرمایید:`,
+      keyboard: [
+        [`📢 عضویت در کانال ${getPlatformName(ctx.platform)}`],
+        ["✅ بررسی و تایید عضویت"]
+      ],
+      sessionState: { ...state, channelMemberVerified: false }
+    };
+  }
+
+  // 3. If Force Join is enabled and user hasn't verified yet, lock all bot access
+  if (isForceJoinActive && !isUserVerified) {
+    return {
+      replyText: `⚠️ **توجه: عضویت اجباری در کانال رسمی**\n\nکاربر گرامی، جهت فعال‌سازی ربات و استفاده از خدمات در پیام‌رسان **${getPlatformName(ctx.platform)}**، عضویت در کانال رسمی اطلاع‌رسانی الزامی است:\n\n📢 **نام کانال:** ${lockConfig.channelName}\n🆔 **شناسه کانال:** ${lockConfig.channelUsername}\n🔗 **لینک عضویت:** ${lockConfig.channelUrl}\n\n${lockConfig.lockMessage ? `💬 ${lockConfig.lockMessage}\n\n` : ""}👇 لطفاً ابتدا عضو کانال شده و سپس روی دکمه **«✅ بررسی و تایید عضویت»** کلیک کنید:`,
+      keyboard: [
+        [`📢 عضویت در کانال ${getPlatformName(ctx.platform)}`],
+        ["✅ بررسی و تایید عضویت"]
+      ],
+      sessionState: { ...state, channelMemberVerified: false }
+    };
   }
 
   // Reset or Start command

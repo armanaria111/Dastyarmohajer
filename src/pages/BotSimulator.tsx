@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import { processBotMessage, BotResponse, MAIN_KEYBOARD } from "../bot/botEngine";
-import { Send, Smartphone, RotateCcw, Sparkles, CheckCheck, Bot, User, ArrowRight, ExternalLink, Phone } from "lucide-react";
+import { Send, Smartphone, RotateCcw, Sparkles, CheckCheck, Bot, User, ArrowRight, ExternalLink, Phone, Lock, ShieldCheck } from "lucide-react";
 import { Link } from "react-router-dom";
+import { getPlatformLockConfig } from "../data/channelLockSettings";
 
 interface Message {
   id: string;
@@ -187,32 +188,53 @@ export default function BotSimulator() {
             <span>شروع مجدد (/start)</span>
           </button>
           <Link
-            to="/bots"
+            to="/admin/bots"
             className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-colors"
           >
-            <span>تنظیمات توکن‌ها</span>
+            <Lock size={14} />
+            <span>تنظیمات ربات‌ها و قفل کانال</span>
             <ArrowRight size={14} />
           </Link>
         </div>
       </div>
 
-      {/* Platform Switcher */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
-        <span className="text-xs font-bold text-gray-500 dark:text-gray-400 shrink-0 ml-1">انتخاب پیام‌رسان:</span>
-        {MESSENGERS.map(m => (
-          <button
-            key={m.id}
-            onClick={() => setSelectedPlatform(m.id)}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-2 ${
-              selectedPlatform === m.id
-                ? `${m.color} text-white shadow-md scale-105`
-                : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
-            }`}
-          >
-            <span className="w-2 h-2 rounded-full bg-white opacity-80"></span>
-            <span>{m.name}</span>
-          </button>
-        ))}
+      {/* Platform Switcher & Force Join Badge */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-gray-800 p-3.5 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-xs">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+          <span className="text-xs font-bold text-gray-500 dark:text-gray-400 shrink-0 ml-1">انتخاب پیام‌رسان:</span>
+          {MESSENGERS.map(m => (
+            <button
+              key={m.id}
+              onClick={() => setSelectedPlatform(m.id)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${
+                selectedPlatform === m.id
+                  ? `${m.color} text-white shadow-md scale-105`
+                  : "bg-gray-50 dark:bg-gray-700/60 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700"
+              }`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-white opacity-80"></span>
+              <span>{m.name}</span>
+            </button>
+          ))}
+        </div>
+
+        {(() => {
+          const lock = getPlatformLockConfig(selectedPlatform);
+          return (
+            <div className="shrink-0 flex items-center gap-2">
+              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-[11px] font-bold ${
+                lock.enabled
+                  ? "bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800"
+                  : "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+              }`}>
+                {lock.enabled ? <Lock size={12} /> : <ShieldCheck size={12} />}
+                <span>
+                  {lock.enabled ? `عضویت اجباری: ${lock.channelUsername || "فعال"}` : "عضویت آزاد"}
+                </span>
+              </span>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Main Grid: Simulator on Center/Left + Quick Test Triggers on Right */}
@@ -345,6 +367,27 @@ export default function BotSimulator() {
             </p>
 
             <div className="space-y-2">
+              <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 space-y-1.5">
+                <span className="text-[11px] font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1">
+                  <Lock size={12} />
+                  <span>تست عضویت اجباری در کانال (Force Join):</span>
+                </span>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <button
+                    onClick={() => handleSendMessage("📢 عضویت در کانال")}
+                    className="p-2 bg-white dark:bg-gray-800 hover:bg-amber-100 dark:hover:bg-amber-900/40 border border-amber-300 dark:border-amber-700 rounded-lg text-[11px] font-bold text-amber-900 dark:text-amber-200 text-center transition-all"
+                  >
+                    📢 دریافت لینک کانال
+                  </button>
+                  <button
+                    onClick={() => handleSendMessage("✅ بررسی و تایید عضویت")}
+                    className="p-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold text-center transition-all shadow-xs"
+                  >
+                    ✅ تایید عضویت
+                  </button>
+                </div>
+              </div>
+
               <button
                 onClick={() => handleSendMessage("🏢 جستجوی دفاتر کفالت")}
                 className="w-full text-right p-3 bg-gray-50 dark:bg-gray-700/50 hover:bg-blue-50 dark:hover:bg-blue-900/20 border border-gray-200 dark:border-gray-600 rounded-xl text-xs font-bold transition-all flex items-center justify-between"
