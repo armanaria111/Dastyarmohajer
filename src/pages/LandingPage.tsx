@@ -21,7 +21,17 @@ import {
   Send,
   Radio,
   ArrowDownCircle,
-  X
+  Calculator,
+  FileText,
+  GraduationCap,
+  Navigation,
+  Scale,
+  X,
+  Calendar,
+  Camera,
+  Car,
+  Bell,
+  Briefcase
 } from "lucide-react";
 import {
   getLandingConfig,
@@ -34,6 +44,17 @@ import { collection, query, getDocs, limit } from "firebase/firestore";
 import { db } from "../firebase";
 import { isSupabaseConfigured, fetchTazkirasFromSupabase } from "../supabase";
 import { TazkiraRecord, INITIAL_TAZKIRAS } from "../data/initialTazkiras";
+import FeeCalculatorModal from "../components/FeeCalculatorModal";
+import ConsularFormsModal from "../components/ConsularFormsModal";
+import EducationGuideModal from "../components/EducationGuideModal";
+import GpsFinderModal from "../components/GpsFinderModal";
+import AiLegalAdvisorModal from "../components/AiLegalAdvisorModal";
+import LostDocsPublicModal from "../components/LostDocsPublicModal";
+import ExpiryReminderModal from "../components/ExpiryReminderModal";
+import DateConverterModal from "../components/DateConverterModal";
+import PhotoStandardizerModal from "../components/PhotoStandardizerModal";
+import DrivingQuizModal from "../components/DrivingQuizModal";
+import JobPortalModal from "../components/JobPortalModal";
 
 export default function LandingPage() {
   const [config, setConfig] = useState<LandingConfig>(() => getLandingConfig());
@@ -43,6 +64,19 @@ export default function LandingPage() {
   const [searching, setSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
+
+  // Modals state
+  const [isFeeCalcOpen, setIsFeeCalcOpen] = useState(false);
+  const [isConsularFormsOpen, setIsConsularFormsOpen] = useState(false);
+  const [isEducationGuideOpen, setIsEducationGuideOpen] = useState(false);
+  const [isGpsFinderOpen, setIsGpsFinderOpen] = useState(false);
+  const [isAiAdvisorOpen, setIsAiAdvisorOpen] = useState(false);
+  const [isLostDocsOpen, setIsLostDocsOpen] = useState(false);
+  const [isExpiryReminderOpen, setIsExpiryReminderOpen] = useState(false);
+  const [isDateConverterOpen, setIsDateConverterOpen] = useState(false);
+  const [isPhotoCropperOpen, setIsPhotoCropperOpen] = useState(false);
+  const [isDrivingQuizOpen, setIsDrivingQuizOpen] = useState(false);
+  const [isJobPortalOpen, setIsJobPortalOpen] = useState(false);
 
   // Load fresh landing config and public tazkira data
   useEffect(() => {
@@ -170,8 +204,12 @@ export default function LandingPage() {
       <header className="sticky top-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-xs">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center shadow-md shadow-blue-500/20">
-              <ShieldCheck size={26} />
+            <div className="w-12 h-12 rounded-2xl bg-black p-0.5 border border-slate-700 shadow-md shadow-blue-500/10 flex items-center justify-center shrink-0">
+              <img
+                src="/logo.png"
+                alt="لوگوی رسمی دستیار مهاجر"
+                className="w-full h-full object-contain rounded-xl"
+              />
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -227,8 +265,19 @@ export default function LandingPage() {
       {/* ========================================================= */}
       {/* Hero Section */}
       {/* ========================================================= */}
-      <section className="relative overflow-hidden pt-12 pb-16 md:pt-20 md:pb-24 bg-gradient-to-b from-blue-50/50 via-white to-slate-50 dark:from-slate-900/50 dark:via-slate-900 dark:to-slate-950 border-b border-slate-200 dark:border-slate-800">
+      <section className="relative overflow-hidden pt-12 pb-16 md:pt-16 md:pb-24 bg-gradient-to-b from-blue-50/50 via-white to-slate-50 dark:from-slate-900/50 dark:via-slate-900 dark:to-slate-950 border-b border-slate-200 dark:border-slate-800">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 text-center">
+          {/* Official Logo Display */}
+          <div className="flex justify-center mb-6">
+            <div className="p-2 sm:p-3 bg-black rounded-3xl border border-slate-800 shadow-2xl shadow-teal-500/10 hover:border-slate-700 transition-all">
+              <img
+                src="/logo.png"
+                alt="لوگوی رسمی دستیار مهاجر"
+                className="h-20 sm:h-24 md:h-28 w-auto object-contain rounded-2xl"
+              />
+            </div>
+          </div>
+
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-xs font-bold mb-6">
             <Sparkles size={14} className="text-blue-600 dark:text-blue-400" />
             <span>سامانه یکپارچه اطلاع‌رسانی و خدمات مهاجرین محترم</span>
@@ -565,90 +614,301 @@ export default function LandingPage() {
       </section>
 
       {/* ========================================================= */}
-      {/* Section: 6 Key Services */}
+      {/* Section: Interactive Services and Tools */}
       {/* ========================================================= */}
       <section id="services" className="py-16 bg-slate-100/50 dark:bg-slate-900/40 border-t border-slate-200 dark:border-slate-800">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 space-y-10">
           <div className="text-center max-w-2xl mx-auto space-y-3">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 text-xs font-bold">
+              <Sparkles size={14} />
+              <span>میز خدمات و ابزارهای آنلاین مهاجرین</span>
+            </div>
             <h3 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">
-              خدمات جامع سامانه دستیار مهاجر
+              خدمات تخصصی و ابزارهای فوری سامانه
             </h3>
             <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-              راهکارهای هوشمند برای کاهش هزینه‌ها و مراجعات مکرر اداری مهاجرین محترم
+              ابزارهای هوشمند زیر به صورت کاملاً رایگان و برخط جهت تسهیل امور اداری، کنسولی و آموزشی مهاجرین محترم طراحی شده‌اند.
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            <div className="p-6 rounded-3xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950 text-blue-600 flex items-center justify-center">
-                <FileCheck2 size={24} />
+            {/* 1. Tazkira Search */}
+            <div className="p-6 rounded-3xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs hover:shadow-lg transition-all flex flex-col justify-between space-y-4">
+              <div className="space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950 text-emerald-600 flex items-center justify-center">
+                  <FileCheck2 size={24} />
+                </div>
+                <h4 className="text-base font-black text-slate-900 dark:text-white">
+                  استعلام تذکره‌های چاپ‌شده
+                </h4>
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                  جستجوی آنی در میان هزاران تذکره ارسال‌شده به سفارت و کنسولگری‌ها، مشخص بودن شماره قطعه و ردیف تحویل.
+                </p>
               </div>
-              <h4 className="text-base font-black text-slate-900 dark:text-white">
-                استعلام آنلاین تذکره الکترونیکی
-              </h4>
-              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                استخراج خودکار لیست‌های ارسالی از کابل و کنسولگری با هوش مصنوعی و امکان جستجوی نام، قطعه و شماره باکس تحویل.
-              </p>
+              <a
+                href="#search-tazkira"
+                className="w-full py-2.5 px-4 bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white dark:bg-slate-700 dark:hover:bg-emerald-600 dark:text-slate-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+              >
+                <Search size={14} />
+                <span>ورود به بخش استعلام</span>
+              </a>
             </div>
 
-            <div className="p-6 rounded-3xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950 text-emerald-600 flex items-center justify-center">
-                <Building2 size={24} />
+            {/* 2. GPS Kafalat Finder */}
+            <div className="p-6 rounded-3xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs hover:shadow-lg transition-all flex flex-col justify-between space-y-4">
+              <div className="space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950 text-blue-600 flex items-center justify-center">
+                  <Navigation size={24} />
+                </div>
+                <h4 className="text-base font-black text-slate-900 dark:text-white">
+                  مسیریابی هوشمند دفاتر کفالت
+                </h4>
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                  یافتن نزدیک‌ترین دفتر کفالت با GPS و مسیریابی مستقیم با برنامه‌های نشان، بلد و Google Maps به همراه تلفن تماس.
+                </p>
               </div>
-              <h4 className="text-base font-black text-slate-900 dark:text-white">
-                بانک اطلاعاتی دفاتر کفالت
-              </h4>
-              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                مشاهده آدرس دقیق، موقعیت مکانی روی نقشه، تلفن تماس و محدوده زیر پوشش تمام دفاتر کفالت در استان‌های سراسر کشور.
-              </p>
+              <button
+                type="button"
+                onClick={() => setIsGpsFinderOpen(true)}
+                className="w-full py-2.5 px-4 bg-blue-50 hover:bg-blue-600 text-blue-700 hover:text-white dark:bg-slate-700 dark:hover:bg-blue-600 dark:text-slate-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+              >
+                <Navigation size={14} />
+                <span>مسیریابی دفاتر (نشان و بلد)</span>
+              </button>
             </div>
 
-            <div className="p-6 rounded-3xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950 text-indigo-600 flex items-center justify-center">
-                <Landmark size={24} />
+            {/* 3. Fee Calculator */}
+            <div className="p-6 rounded-3xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs hover:shadow-lg transition-all flex flex-col justify-between space-y-4">
+              <div className="space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950 text-indigo-600 flex items-center justify-center">
+                  <Calculator size={24} />
+                </div>
+                <h4 className="text-base font-black text-slate-900 dark:text-white">
+                  محاسبه‌گر هزینه‌ها و تعرفه‌ها
+                </h4>
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                  برآورد دقیق هزینه‌های دلاری و تومانی تمدید پاسپورت ۵ ساله، تثبیت هویت، نوبت کفالت و مدارک برای کل خانوار.
+                </p>
               </div>
-              <h4 className="text-base font-black text-slate-900 dark:text-white">
-                امور کنسولگری و سفارت‌ها
-              </h4>
-              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                راهنمای اخذ نوبت سفارت، صدور و تمدید پاسپورت، تثبیت هویت و نرخ‌های مصوب خدمات کنسولی با اطلاعات به روز.
-              </p>
+              <button
+                type="button"
+                onClick={() => setIsFeeCalcOpen(true)}
+                className="w-full py-2.5 px-4 bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white dark:bg-slate-700 dark:hover:bg-indigo-600 dark:text-slate-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+              >
+                <Calculator size={14} />
+                <span>محاسبه آنلاین هزینه‌ها</span>
+              </button>
             </div>
 
-            <div className="p-6 rounded-3xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-amber-950 text-amber-600 flex items-center justify-center">
-                <ShieldCheck size={24} />
+            {/* 4. Consular Form Generator */}
+            <div className="p-6 rounded-3xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs hover:shadow-lg transition-all flex flex-col justify-between space-y-4">
+              <div className="space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-teal-50 dark:bg-teal-950 text-teal-600 flex items-center justify-center">
+                  <FileText size={24} />
+                </div>
+                <h4 className="text-base font-black text-slate-900 dark:text-white">
+                  فرم‌ساز اسناد کنسولی و PDF
+                </h4>
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                  تکمیل و چاپ خودکار فرم‌های رسمی تثبیت هویت سفارت، وکالت‌نامه کاری، استشهاد محلی و رضایت‌نامه سفر با سربرگ استاندارد.
+                </p>
               </div>
-              <h4 className="text-base font-black text-slate-900 dark:text-white">
-                سامانه مدارک مفقودی
-              </h4>
-              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                ثبت و جستجوی اسناد گمشده نظیر کارت آمایش، برگه سرشماری، گذرنامه و کارت بانکی جهت بازگشت به صاحبان آنها.
-              </p>
+              <button
+                type="button"
+                onClick={() => setIsConsularFormsOpen(true)}
+                className="w-full py-2.5 px-4 bg-teal-50 hover:bg-teal-600 text-teal-700 hover:text-white dark:bg-slate-700 dark:hover:bg-teal-600 dark:text-slate-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+              >
+                <FileText size={14} />
+                <span>ساخت و چاپ فرم رسمی</span>
+              </button>
             </div>
 
-            <div className="p-6 rounded-3xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-purple-50 dark:bg-purple-950 text-purple-600 flex items-center justify-center">
-                <Bot size={24} />
+            {/* 5. AI Legal Advisor */}
+            <div className="p-6 rounded-3xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs hover:shadow-lg transition-all flex flex-col justify-between space-y-4">
+              <div className="space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-purple-50 dark:bg-purple-950 text-purple-600 flex items-center justify-center">
+                  <Bot size={24} />
+                </div>
+                <h4 className="text-base font-black text-slate-900 dark:text-white">
+                  مشاور هوش مصنوعی اقامتی و حقوقی
+                </h4>
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                  پاسخگویی آنی و شبانه‌روزی به پرسش‌های کارت آمایش، گواهینامه رانندگی، افتتاح حساب بانکی و بخشنامه‌های سازمان مهاجرت.
+                </p>
               </div>
-              <h4 className="text-base font-black text-slate-900 dark:text-white">
-                ربات هوش مصنوعی مشاور
-              </h4>
-              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                پاسخگویی دقیق به پرسش‌های حقوقی، اقامتی، تحصیلی و قوانین کار مهاجرین با موتور هوش مصنوعی تخصصی.
-              </p>
+              <button
+                type="button"
+                onClick={() => setIsAiAdvisorOpen(true)}
+                className="w-full py-2.5 px-4 bg-purple-50 hover:bg-purple-600 text-purple-700 hover:text-white dark:bg-slate-700 dark:hover:bg-purple-600 dark:text-slate-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+              >
+                <Bot size={14} />
+                <span>گفتگو با مشاور هوشمند</span>
+              </button>
             </div>
 
-            <div className="p-6 rounded-3xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-rose-50 dark:bg-rose-950 text-rose-600 flex items-center justify-center">
-                <Megaphone size={24} />
+            {/* 6. Lost & Found Documents */}
+            <div className="p-6 rounded-3xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs hover:shadow-lg transition-all flex flex-col justify-between space-y-4">
+              <div className="space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-amber-950 text-amber-600 flex items-center justify-center">
+                  <ShieldCheck size={24} />
+                </div>
+                <h4 className="text-base font-black text-slate-900 dark:text-white">
+                  مدارک و اسناد مفقودی
+                </h4>
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                  جستجو در بانک مدارک پیدا شده (کارت آمایش، سرشماری، پاسپورت، کارت عابر) یا گزارش مدرک پیدا شده توسط شهروندان.
+                </p>
               </div>
-              <h4 className="text-base font-black text-slate-900 dark:text-white">
-                پخش فوری اطلاعیه‌ها
-              </h4>
-              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                انتشار همزمان پیام‌ها و هشدارهای مهم کنسولی در تمام کانال‌ها و پیام‌رسان‌ها به صورت هماهنگ و در لحظه.
-              </p>
+              <button
+                type="button"
+                onClick={() => setIsLostDocsOpen(true)}
+                className="w-full py-2.5 px-4 bg-amber-50 hover:bg-amber-600 text-amber-700 hover:text-white dark:bg-slate-700 dark:hover:bg-amber-600 dark:text-slate-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+              >
+                <ShieldCheck size={14} />
+                <span>استعلام مدارک گمشده</span>
+              </button>
+            </div>
+
+            {/* 7. Expiry Reminder */}
+            <div className="p-6 rounded-3xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs hover:shadow-lg transition-all flex flex-col justify-between space-y-4">
+              <div className="space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-amber-950 text-amber-600 flex items-center justify-center">
+                  <Bell size={24} />
+                </div>
+                <h4 className="text-base font-black text-slate-900 dark:text-white">
+                  یادآور تاریخ انقضای مدارک
+                </h4>
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                  ثبت تاریخ انقضای کارت آمایش، پاسپورت و روادید برای دریافت هشدار پیامکی ۳۰ روز و ۱۰ روز پیش از اتمام اعتبار.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsExpiryReminderOpen(true)}
+                className="w-full py-2.5 px-4 bg-amber-50 hover:bg-amber-600 text-amber-700 hover:text-white dark:bg-slate-700 dark:hover:bg-amber-600 dark:text-slate-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+              >
+                <Bell size={14} />
+                <span>ثبت هشدار انقضا</span>
+              </button>
+            </div>
+
+            {/* 8. Date & Age Converter */}
+            <div className="p-6 rounded-3xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs hover:shadow-lg transition-all flex flex-col justify-between space-y-4">
+              <div className="space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-teal-50 dark:bg-teal-950 text-teal-600 flex items-center justify-center">
+                  <Calendar size={24} />
+                </div>
+                <h4 className="text-base font-black text-slate-900 dark:text-white">
+                  مبدل تاریخ تذکره و سن قانونی
+                </h4>
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                  تبدیل سال خورشیدی افغانستان به میلادی، محاسبه سن تذکره کاغذی و بررسی سن قانونی ۱۸ سال و دبستان.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsDateConverterOpen(true)}
+                className="w-full py-2.5 px-4 bg-teal-50 hover:bg-teal-600 text-teal-700 hover:text-white dark:bg-slate-700 dark:hover:bg-teal-600 dark:text-slate-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+              >
+                <Calendar size={14} />
+                <span>تبدیل تاریخ و سن</span>
+              </button>
+            </div>
+
+            {/* 9. Biometric Photo Standardizer */}
+            <div className="p-6 rounded-3xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs hover:shadow-lg transition-all flex flex-col justify-between space-y-4">
+              <div className="space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950 text-blue-600 flex items-center justify-center">
+                  <Camera size={24} />
+                </div>
+                <h4 className="text-base font-black text-slate-900 dark:text-white">
+                  برش‌گر عکس پرسنلی ۴×۳
+                </h4>
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                  برش استاندارد عکس، اعمال زمینه سفید یکدست و انطباق با خطوط بیومتریک چشم و چانه کنسولگری.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsPhotoCropperOpen(true)}
+                className="w-full py-2.5 px-4 bg-blue-50 hover:bg-blue-600 text-blue-700 hover:text-white dark:bg-slate-700 dark:hover:bg-blue-600 dark:text-slate-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+              >
+                <Camera size={14} />
+                <span>تنظیم عکس ۴×۳</span>
+              </button>
+            </div>
+
+            {/* 10. Driving Quiz Simulator */}
+            <div className="p-6 rounded-3xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs hover:shadow-lg transition-all flex flex-col justify-between space-y-4">
+              <div className="space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950 text-indigo-600 flex items-center justify-center">
+                  <Car size={24} />
+                </div>
+                <h4 className="text-base font-black text-slate-900 dark:text-white">
+                  آزمون آیین‌نامه رانندگی
+                </h4>
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                  شبیه‌ساز رسمی تست آیین‌نامه رانندگی اتباع، تابلوها، حق تقدم و سوالات فنی همراه با کارنامه قبولی.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsDrivingQuizOpen(true)}
+                className="w-full py-2.5 px-4 bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white dark:bg-slate-700 dark:hover:bg-indigo-600 dark:text-slate-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+              >
+                <Car size={14} />
+                <span>شروع آزمون آنلاین</span>
+              </button>
+            </div>
+
+            {/* 11. Job Portal */}
+            <div className="p-6 rounded-3xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs hover:shadow-lg transition-all flex flex-col justify-between space-y-4">
+              <div className="space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950 text-emerald-600 flex items-center justify-center">
+                  <Briefcase size={24} />
+                </div>
+                <h4 className="text-base font-black text-slate-900 dark:text-white">
+                  کاریابی و استخدام مجاز اتباع
+                </h4>
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                  بانک فرصت‌های شغلی مجاز با جای خواب و پروانه کار، ثبت آگهی استخدام کارفرما و ثبت رزومه کارجویان مهاجر.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsJobPortalOpen(true)}
+                className="w-full py-2.5 px-4 bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white dark:bg-slate-700 dark:hover:bg-emerald-600 dark:text-slate-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+              >
+                <Briefcase size={14} />
+                <span>ورود به سامانه کاریابی</span>
+              </button>
+            </div>
+
+            {/* 12. Education Guide */}
+            <div className="p-6 rounded-3xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs hover:shadow-lg transition-all flex flex-col justify-between space-y-4 md:col-span-2 lg:col-span-2">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-rose-50 dark:bg-rose-950 text-rose-600 flex items-center justify-center shrink-0">
+                    <GraduationCap size={24} />
+                  </div>
+                  <div>
+                    <h4 className="text-base font-black text-slate-900 dark:text-white">
+                      راهنمای جامع ثبت‌نام مدارس و تحصیل اتباع (برگه حمایت تحصیلی و دانشگاه)
+                    </h4>
+                    <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed mt-1">
+                      مراحل دریافت برگه حمایت تحصیلی برای دانش‌آموزان سرشماری‌شده، نوبت‌گیری سنجش سلامت پایه اول (سامانه my.medu.ir) و قوانین شهریه.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsEducationGuideOpen(true)}
+                  className="px-6 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-md shadow-rose-600/20 shrink-0"
+                >
+                  <GraduationCap size={15} />
+                  <span>مشاهده راهنمای ثبت‌نام مدارس</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -698,8 +958,12 @@ export default function LandingPage() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 space-y-8">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-8 border-b border-slate-800">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center">
-                <ShieldCheck size={22} />
+              <div className="w-11 h-11 rounded-2xl bg-black p-0.5 border border-slate-700 overflow-hidden flex items-center justify-center shrink-0">
+                <img
+                  src="/logo.png"
+                  alt="لوگوی رسمی دستیار مهاجر"
+                  className="w-full h-full object-contain rounded-xl"
+                />
               </div>
               <div>
                 <h4 className="text-base font-black text-white">دستیار مهاجر</h4>
@@ -722,6 +986,64 @@ export default function LandingPage() {
           </div>
         </div>
       </footer>
+
+      {/* ========================================================= */}
+      {/* Interactive Service Modals */}
+      {/* ========================================================= */}
+      <FeeCalculatorModal
+        isOpen={isFeeCalcOpen}
+        onClose={() => setIsFeeCalcOpen(false)}
+      />
+
+      <ConsularFormsModal
+        isOpen={isConsularFormsOpen}
+        onClose={() => setIsConsularFormsOpen(false)}
+      />
+
+      <EducationGuideModal
+        isOpen={isEducationGuideOpen}
+        onClose={() => setIsEducationGuideOpen(false)}
+      />
+
+      <GpsFinderModal
+        isOpen={isGpsFinderOpen}
+        onClose={() => setIsGpsFinderOpen(false)}
+      />
+
+      <AiLegalAdvisorModal
+        isOpen={isAiAdvisorOpen}
+        onClose={() => setIsAiAdvisorOpen(false)}
+      />
+
+      <LostDocsPublicModal
+        isOpen={isLostDocsOpen}
+        onClose={() => setIsLostDocsOpen(false)}
+      />
+
+      <ExpiryReminderModal
+        isOpen={isExpiryReminderOpen}
+        onClose={() => setIsExpiryReminderOpen(false)}
+      />
+
+      <DateConverterModal
+        isOpen={isDateConverterOpen}
+        onClose={() => setIsDateConverterOpen(false)}
+      />
+
+      <PhotoStandardizerModal
+        isOpen={isPhotoCropperOpen}
+        onClose={() => setIsPhotoCropperOpen(false)}
+      />
+
+      <DrivingQuizModal
+        isOpen={isDrivingQuizOpen}
+        onClose={() => setIsDrivingQuizOpen(false)}
+      />
+
+      <JobPortalModal
+        isOpen={isJobPortalOpen}
+        onClose={() => setIsJobPortalOpen(false)}
+      />
     </div>
   );
 }

@@ -68,8 +68,14 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     <div dir="rtl" className="min-h-screen flex items-center justify-center bg-slate-900 text-slate-100 transition-colors p-4">
       <div className="bg-slate-800/90 backdrop-blur-md p-6 sm:p-8 rounded-3xl shadow-2xl w-full max-w-md border border-slate-700 space-y-6">
         <div className="text-center">
-          <div className="inline-flex p-3.5 bg-blue-600/20 text-blue-400 rounded-2xl mb-3 border border-blue-500/30 shadow-inner">
-            <ShieldCheck size={36} />
+          <div className="flex justify-center mb-4">
+            <div className="w-20 h-20 rounded-3xl bg-black p-1 border border-slate-700 shadow-2xl shadow-teal-500/10 overflow-hidden flex items-center justify-center">
+              <img
+                src="/logo.png"
+                alt="لوگوی دستیار مهاجر"
+                className="w-full h-full object-contain rounded-2xl"
+              />
+            </div>
           </div>
           <h1 className="text-2xl font-black text-white mb-1.5">
             ورود به پنل مدیریت

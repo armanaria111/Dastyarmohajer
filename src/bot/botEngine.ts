@@ -1,6 +1,8 @@
 import { collection, getDocs, addDoc, doc, setDoc, Timestamp, query, orderBy, limit } from "firebase/firestore";
 import { db } from "../firebase";
 import { getPlatformLockConfig } from "../data/channelLockSettings";
+import { INITIAL_TAZKIRAS, TazkiraRecord } from "../data/initialTazkiras";
+import { INITIAL_JOBS } from "../data/jobsData";
 
 export interface BotResponse {
   replyText: string;
@@ -17,11 +19,14 @@ export interface BotContext {
 }
 
 export const MAIN_KEYBOARD = [
+  ["📄 استعلام تذکره‌های چاپ‌شده", "🤖 مشاور هوشمند اقامتی (AI)"],
+  ["⏰ یادآور انقضای مدارک (پیامک)", "💼 کاریابی و استخدام اتباع"],
+  ["📅 مبدل تاریخ و سن تذکره", "🚗 آزمون آیین‌نامه رانندگی"],
   ["🏢 جستجوی دفاتر کفالت", "🏛 سفارت‌ها و کنسولگری‌ها"],
-  ["⭐ نظرسنجی و ثبت نظر دفتر کفالت", "🪪 اسناد و مدارک مفقودی"],
-  ["🌐 سایت‌های خدماتی", "❓ سوالات متداول"],
-  ["📝 ثبت درخواست آنلاین", "🔍 پیگیری وضعیت درخواست"],
-  ["📢 آخرین اخبار و بخشنامه‌ها", "📞 ارتباط با پشتیبانی"]
+  ["💰 محاسبه‌گر هزینه‌ها و تعرفه‌ها", "📋 فرم‌ساز اسناد کنسولی"],
+  ["📷 استاندارد عکس ۴×۳", "🪪 اسناد و مدارک مفقودی"],
+  ["🎓 راهنمای مدارس اتباع", "🗺 مسیریابی دفاتر (نشان و بلد)"],
+  ["📢 آخرین اخبار و بخشنامه‌ها", "⭐ نظرسنجی و پشتیبانی"]
 ];
 
 function formatClickablePhone(phone: string): string {
@@ -116,22 +121,95 @@ export async function processBotMessage(ctx: BotContext): Promise<BotResponse> {
   // Multi-Step Conversational State Machine
   // -------------------------------------------------------------
 
-  // 1. Kefalat Office Search Step
+  // 1. Tazkira Search Step (استعلام تذکره الکترونیکی چاپ‌شده)
+  if (state.step === "awaiting_tazkira_search") {
+    return await handleTazkiraSearch(text);
+  }
+
+  // 2. AI Advisor Step (مشاور هوشمند اقامتی و حقوقی)
+  if (state.step === "awaiting_ai_advisor_question") {
+    if (text === "پرسش سوال دیگر از مشاور" || text === "سوال جدید") {
+      return {
+        replyText: `🤖 **مشاور هوشمند اقامتی و حقوقی:**\n\nلطفاً سوال حقوقی، اقامتی، تحصیلی یا بانکی خود را بنویسید و ارسال کنید:`,
+        keyboard: [
+          ["شرایط گواهینامه رانندگی مهاجرین", "افتتاح حساب بانکی و کارت عابر"],
+          ["نحوه دریافت برگه تردد بین استانی", "خروج و مراجعت به افغانستان"],
+          ["بازگشت به منوی اصلی"]
+        ],
+        sessionState: { step: "awaiting_ai_advisor_question" }
+      };
+    }
+    return await handleAiAdvisorQuestion(text);
+  }
+
+  // 3. Fee Calculator Steps (محاسبه‌گر هزینه‌ها و تعرفه‌ها)
+  if (state.step === "awaiting_fee_calc_menu") {
+    return await handleFeeCalculator(text);
+  }
+
+  if (state.step === "awaiting_family_count") {
+    return handleFamilyCountCalculation(text);
+  }
+
+  // 4. Consular Form Builder Steps (فرم‌ساز اسناد رسمی)
+  if (state.step === "awaiting_form_type") {
+    return handleFormTypeSelection(text);
+  }
+
+  if (state.step === "awaiting_form_name") {
+    return {
+      replyText: `نام متقاضی: **${text}** ثبت شد.\n\nاکنون **نام پدر** و **نام پدربزرگ** را ارسال فرمایید (مثال: \`محمد فرزند علی\`):`,
+      keyboard: [["بازگشت به منوی اصلی"]],
+      sessionState: { ...state, step: "awaiting_form_father", fullName: text }
+    };
+  }
+
+  if (state.step === "awaiting_form_father") {
+    return {
+      replyText: `نسبت خانوادگی: **${text}** ثبت شد.\n\nاکنون **نام ولایت و ولسوالی محل سکونت/تولد** را ارسال فرمایید (مثال: \`هرات، ولسوالی گذره\` یا \`کابل\`):`,
+      keyboard: [["بازگشت به منوی اصلی"]],
+      sessionState: { ...state, step: "awaiting_form_province", fatherName: text }
+    };
+  }
+
+  if (state.step === "awaiting_form_province") {
+    return {
+      replyText: `ولایت: **${text}** ثبت شد.\n\nاکنون **شماره مدرک شناسایی** (شماره تذکره، شماره پاسپورت یا کد یکتا) را ارسال فرمایید:`,
+      keyboard: [["بازگشت به منوی اصلی"]],
+      sessionState: { ...state, step: "awaiting_form_doc_num", province: text }
+    };
+  }
+
+  if (state.step === "awaiting_form_doc_num") {
+    return generateOfficialFormText({ ...state, docNumber: text });
+  }
+
+  // 5. Education Guide Step (راهنمای ثبت‌نام مدارس)
+  if (state.step === "awaiting_education_topic") {
+    return handleEducationGuide(text);
+  }
+
+  // 6. GPS Routing Step (مسیریابی دفاتر کفالت)
+  if (state.step === "awaiting_gps_province") {
+    return await handleGpsRouting(text);
+  }
+
+  // 7. Kefalat Office Search Step
   if (state.step === "awaiting_branch_search") {
     return await handleKefalatOfficeSearch(text);
   }
 
-  // 2. Embassy Search Step
+  // 8. Embassy Search Step
   if (state.step === "awaiting_embassy_search") {
     return await handleEmbassySearch(text);
   }
 
-  // 3. Tracking Code Step
+  // 9. Tracking Code Step
   if (state.step === "awaiting_tracking_code") {
     return await handleTrackingSearch(text);
   }
 
-  // 4. Online Booking / Registration Flow
+  // 10. Online Booking / Registration Flow
   if (state.step === "awaiting_reg_name") {
     return {
       replyText: `نام شما: **${text}** ثبت شد.\n\nاکنون نوع خدمت مورد نیاز خود را ارسال فرمایید (یا از گزینه‌های زیر انتخاب فرمایید):`,
@@ -319,9 +397,266 @@ export async function processBotMessage(ctx: BotContext): Promise<BotResponse> {
     }
   }
 
+  // 7. Expiry Reminder Flow
+  if (state.step === "awaiting_expiry_doc_type") {
+    return {
+      replyText: `نوع مدرک: **${text}**\n\nلطفاً **تاریخ انقضای مدرک** خود را به صورت شمسی یا میلادی ارسال فرمایید (مثال: \`۱۴۰۳/۱۲/۲۹\` یا \`2025/03/20\`):`,
+      keyboard: [["۱۴۰۳/۱۰/۳۰", "۱۴۰۳/۱۲/۲۹"], ["۱۴۰۴/۰۶/۳۱", "بازگشت به منوی اصلی"]],
+      sessionState: { step: "awaiting_expiry_date", docType: text }
+    };
+  }
+
+  if (state.step === "awaiting_expiry_date") {
+    return {
+      replyText: `تاریخ انقضا: **${text}** ثبت شد.\n\nلطفاً **شماره موبایل** خود را جهت دریافت پیامک هشدار ۳۰ روز و ۱۰ روز پیش از اتمام اعتبار ارسال فرمایید:`,
+      keyboard: [["بازگشت به منوی اصلی"]],
+      sessionState: { step: "awaiting_expiry_phone", docType: state.docType, expiryDate: text }
+    };
+  }
+
+  if (state.step === "awaiting_expiry_phone") {
+    const phone = text;
+    try {
+      await addDoc(collection(db, "expiry_reminders"), {
+        docType: state.docType || "مدرک اقامتی",
+        expiryDate: state.expiryDate || "ثبت نشده",
+        phone,
+        platform: ctx.platform,
+        userId: ctx.userId,
+        createdAt: Timestamp.now()
+      });
+
+      return {
+        replyText: `✅ **یادآور تاریخ انقضا با موفقیت فعال شد!**\n\n📋 **نوع مدرک:** ${state.docType}\n📅 **تاریخ انقضا:** ${state.expiryDate}\n📱 **شماره پیامک:** ${phone}\n\n🔔 سامانه ۳۰ روز و ۱۰ روز قبل از تاریخ انقضا، پیامک هشدار به همراه آدرس دفاتر کفالت و لیست مدارک لازم را برای شما ارسال خواهد کرد.`,
+        keyboard: MAIN_KEYBOARD,
+        sessionState: { step: "idle" }
+      };
+    } catch (err: any) {
+      return {
+        replyText: `خطا در ثبت یادآور: ${err.message}`,
+        keyboard: MAIN_KEYBOARD,
+        sessionState: { step: "idle" }
+      };
+    }
+  }
+
+  // 8. Date & Age Converter Flow
+  if (state.step === "awaiting_date_convert_year") {
+    const rawYear = text.replace(/[^0-9]/g, "");
+    const yearNum = parseInt(rawYear, 10);
+    if (!yearNum || isNaN(yearNum)) {
+      return {
+        replyText: `⚠️ لطفاً سال تولد یا تاریخ مورد نظر را به عدد وارد فرمایید (مثال: \`1380\` یا \`1365\`):`,
+        keyboard: [["۱۳۸۰", "۱۳۷۵"], ["۱۳۸۵", "بازگشت به منوی اصلی"]],
+        sessionState: { step: "awaiting_date_convert_year" }
+      };
+    }
+
+    let shamsiYear = yearNum;
+    let miladiYear = yearNum + 621;
+    if (yearNum > 1900) {
+      miladiYear = yearNum;
+      shamsiYear = yearNum - 621;
+    }
+
+    const currentShamsiYear = 1403;
+    const age = currentShamsiYear - shamsiYear;
+    const isAdult = age >= 18;
+    const isSchoolAge = age >= 6 && age <= 18;
+
+    return {
+      replyText: `📅 **نتیجه محاسبه سن و تبدیل تاریخ تذکره:**\n\n🔹 **سال خورشیدی (هجری شمسی افغانستان):** ${shamsiYear}\n🔹 **سال میلادی معادل:** ${miladiYear}\n🔹 **سن تخمینی بر اساس تذکره:** ${age} سال\n\n📋 **بررسی ضوابط قانونی و ثبت‌نام:**\n• ${isAdult ? "✅ فرد به **سن قانونی ۱۸ سال** رسیده است (واجد شرایط اخذ پاسپورت مستقل و گواهینامه رانندگی)." : "ℹ️ فرد **زیر ۱۸ سال** است (نیازمند رضایت ولی قانونی/پدر)."}\n• ${isSchoolAge ? "🎒 در **سن مجاز تحصیل در مدارس** (ابتدایی تا متوسطه دوم) قرار دارد." : "🎒 خارج از رده سنی عمومی دبستان و دبیرستان."}`,
+      keyboard: [["محاسبه تاریخ دیگر"], ["بازگشت به منوی اصلی"]],
+      sessionState: { step: "idle" }
+    };
+  }
+
+  // 9. Driving Quiz Flow
+  if (state.step === "awaiting_driving_quiz_answer") {
+    const isCorrect = text.includes("گزینه ۲") || text.includes("حق تقدم با وسیله داخل میدان") || text.includes("پاسپورت معتبر با اقامت");
+    return {
+      replyText: isCorrect
+        ? `✅ **پاسخ شما کاملاً صحیح است!** 🌟\n\n💡 **توضیح فنی:** در تمام میادین و تقاطع‌های فاقد چراغ راهنما، حق تقدم عبور با وسیله نقلیه‌ای است که از قبل وارد حریم میدان شده و در حال گردش است.\n\nبرای تمرین ۳۰ سوال کامل و شبیه‌ساز رسمی آیین‌نامه، می‌توانید از بخش «آزمون آیین‌نامه» در صفحه سایت سامانه استفاده فرمایید.`
+        : `❌ **پاسخ نادرست است.**\n\n💡 **پاسخ صحیح:** حق تقدم عبور همواره با خودرویی است که داخل میدان در حال حرکت است.\n\nجهت آمادگی کامل برای آزمون کتبی آیین‌نامه اتباع، شبیه‌ساز ۳۰ سواله آزمون را در سایت امتحان کنید.`,
+      keyboard: [["سوال بعدی آزمون رانندگی"], ["بازگشت به منوی اصلی"]],
+      sessionState: { step: "idle" }
+    };
+  }
+
+  // 10. Job Portal Flow
+  if (state.step === "awaiting_job_portal_action") {
+    if (text.includes("مشاهده") || text.includes("فرصت") || text.includes("لیست")) {
+      return await handleJobPortalList();
+    } else if (text.includes("کارفرما") || text.includes("آگهی")) {
+      return {
+        replyText: `📢 **ثبت آگهی استخدام کارفرما (رایگان):**\n\nلطفاً **عنوان شغل مورد نظر** و مهارت را ارسال فرمایید (مثال: \`استادکار خیاط با جای خواب\` یا \`کارگر گلخانه\`):`,
+        keyboard: [["بازگشت به منوی اصلی"]],
+        sessionState: { step: "awaiting_job_post_title" }
+      };
+    } else if (text.includes("کارجو") || text.includes("رزومه")) {
+      return {
+        replyText: `👤 **ثبت مشخصات و تخصص کارجو:**\n\nلطفاً **مهارت اصلی و تخصص خود** را ارسال فرمایید (مثال: \`چرخکار تریکو\` یا \`جوشکار\` یا \`کارگر ساده\`):`,
+        keyboard: [["بازگشت به منوی اصلی"]],
+        sessionState: { step: "awaiting_job_seeker_skill" }
+      };
+    }
+  }
+
+  if (state.step === "awaiting_job_post_title") {
+    return {
+      replyText: `عنوان آگهی: **${text}**\n\nلطفاً **شماره تماس مستقیم کارفرما** جهت درج در آگهی را ارسال فرمایید:`,
+      keyboard: [["بازگشت به منوی اصلی"]],
+      sessionState: { step: "awaiting_job_post_phone", jobTitle: text }
+    };
+  }
+
+  if (state.step === "awaiting_job_post_phone") {
+    const contactPhone = text;
+    try {
+      await addDoc(collection(db, "job_postings"), {
+        title: state.jobTitle || "فرصت شغلی مجاز",
+        category: "تولیدی و کارگاهی",
+        province: "تهران",
+        city: "تهران و حومه",
+        salary: "توافقی و قانونی",
+        hasAccommodation: true,
+        hasFood: false,
+        requiresWorkPermit: true,
+        description: `آگهی ثبت‌شده از طریق ربات پیام‌رسان ${getPlatformName(ctx.platform)}`,
+        employerName: "کارفرمای محترم",
+        contactPhone,
+        datePosted: "امروز",
+        status: "active",
+        createdAt: Timestamp.now()
+      });
+
+      return {
+        replyText: `✅ **آگهی استخدام شما با موفقیت ثبت و منتشر گردید!**\n\n💼 **عنوان شغل:** ${state.jobTitle}\n📞 **تلفن تماس:** ${contactPhone}\n\n📌 این آگهی بلافاصله در وب‌سایت و کلیه ربات‌های پیام‌رسان برای کارجویان نمایش داده می‌شود.`,
+        keyboard: MAIN_KEYBOARD,
+        sessionState: { step: "idle" }
+      };
+    } catch (err: any) {
+      return {
+        replyText: `خطا در ثبت آگهی: ${err.message}`,
+        keyboard: MAIN_KEYBOARD,
+        sessionState: { step: "idle" }
+      };
+    }
+  }
+
+  if (state.step === "awaiting_job_seeker_skill") {
+    return {
+      replyText: `مهارت شما: **${text}** ثبت شد.\n\nلطفاً **شماره موبایل** خود را ارسال فرمایید تا کارفرمایان بتوانند جهت همکاری با شما تماس بگیرند:`,
+      keyboard: [["بازگشت به منوی اصلی"]],
+      sessionState: { step: "awaiting_job_seeker_phone", skill: text }
+    };
+  }
+
+  if (state.step === "awaiting_job_seeker_phone") {
+    const phone = text;
+    try {
+      await addDoc(collection(db, "job_seekers"), {
+        name: ctx.userName || "کارجوی محترم",
+        skill: state.skill || "مهارت فنی",
+        phone,
+        platform: ctx.platform,
+        status: "active",
+        createdAt: Timestamp.now()
+      });
+
+      return {
+        replyText: `✅ **مشخصات شغلی شما در بانک کارجویان مجاز ثبت شد!**\n\n🔧 **مهارت:** ${state.skill}\n📱 **شماره تماس:** ${phone}\n\nکارفرمایان نیازمند نیروی کار در این ردیف شغلی می‌توانند مستقیماً با شما تماس حاصل فرمایند.`,
+        keyboard: MAIN_KEYBOARD,
+        sessionState: { step: "idle" }
+      };
+    } catch (err: any) {
+      return {
+        replyText: `خطا در ثبت اطلاعات کارجو: ${err.message}`,
+        keyboard: MAIN_KEYBOARD,
+        sessionState: { step: "idle" }
+      };
+    }
+  }
+
   // -------------------------------------------------------------
   // Main Menu Keyword Dispatcher
   // -------------------------------------------------------------
+
+  // 1. Tazkira Search Trigger
+  if (text.includes("تذکره") || text.includes("چاپ") || text.includes("استعلام تذکره")) {
+    return {
+      replyText: `📄 **استعلام آنلاین تذکره‌های الکترونیکی چاپ‌شده**\n\nجهت جستجو در میان لیست‌های ارسالی به سفارت و کنسولگری‌ها، لطفاً **نام**، **نام خانوادگی** یا **نام پدر** متقاضی را ارسال فرمایید (مثال: \`احمد جمشیدی\` یا \`قاسمی\`):`,
+      keyboard: [["نمایش آخرین تذکره‌های ارسالی"], ["بازگشت به منوی اصلی"]],
+      sessionState: { step: "awaiting_tazkira_search" }
+    };
+  }
+
+  // 2. AI Advisor Trigger
+  if (text.includes("مشاور") || text.includes("هوش مصنوعی") || text.includes("حقوقی") || text.includes("اقامتی")) {
+    return {
+      replyText: `🤖 **مشاور هوش مصنوعی اقامتی و حقوقی مهاجرین**\n\nسلام! من آماده پاسخگویی به سوالات شما در زمینه قوانین مهاجرت، گواهینامه، افتتاح حساب بانکی، کارت کارگری و مدارس هستم.\n\n👇 لطفاً سوال خود را بپرسید یا از موضوعات زیر انتخاب کنید:`,
+      keyboard: [
+        ["شرایط گواهینامه رانندگی مهاجرین", "افتتاح حساب بانکی و کارت عابر"],
+        ["نحوه دریافت برگه تردد بین استانی", "خروج و مراجعت به افغانستان"],
+        ["شرایط دریافت کارت هوشمند اتباع", "بازگشت به منوی اصلی"]
+      ],
+      sessionState: { step: "awaiting_ai_advisor_question" }
+    };
+  }
+
+  // 3. Fee Calculator Trigger
+  if (text.includes("محاسبه") || text.includes("تعرفه") || text.includes("هزینه") || text.includes("دلار")) {
+    return {
+      replyText: `💰 **محاسبه‌گر آنلاین هزینه‌ها و تعرفه‌ها**\n\nلطفاً نوع خدمت را انتخاب فرمایید تا ریز هزینه‌ها، معادل ریالی و مدارک لازم را مشاهده نمایید:`,
+      keyboard: [
+        ["تمدید پاسپورت ۵ ساله (۱۲۰ دلار)", "پاسپورت ۲ ساله (۲۰ دلار)"],
+        ["تثبیت هویت و تذکره سفارت", "هزینه‌های دفتر کفالت و پروانه کار"],
+        ["محاسبه کل هزینه‌ها برای خانواده", "بازگشت به منوی اصلی"]
+      ],
+      sessionState: { step: "awaiting_fee_calc_menu" }
+    };
+  }
+
+  // 4. Consular Forms Trigger
+  if (text.includes("فرم") || text.includes("وکالت") || text.includes("استشهاد") || text.includes("رضایت")) {
+    return {
+      replyText: `📋 **سامانه خودکار فرم‌ساز اسناد رسمی کنسولی**\n\nنوع سندی که می‌خواهید متن رسمی و استاندارد آن برای شما تنظیم شود را انتخاب فرمایید:`,
+      keyboard: [
+        ["فرم درخواست تثبیت هویت سفارت", "وکالت‌نامه رسمی کاری و اداری"],
+        ["استشهاد محلی تایید هویت شرعی", "رضایت‌نامه سفر و خروج ولی قانونی"],
+        ["بازگشت به منوی اصلی"]
+      ],
+      sessionState: { step: "awaiting_form_type" }
+    };
+  }
+
+  // 5. Education Guide Trigger
+  if (text.includes("مدرسه") || text.includes("مدارس") || text.includes("تحصیل") || text.includes("دانش آموز")) {
+    return {
+      replyText: `🎓 **راهنمای ثبت‌نام مدارس و امور تحصیلی دانش‌آموزان اتباع**\n\nلطفاً بخش مورد نظر را جهت دریافت راهنمای کامل انتخاب فرمایید:`,
+      keyboard: [
+        ["ثبت‌نام مدارس با آمایش و پاسپورت", "برگه حمایت تحصیلی فاقدین مدرک"],
+        ["نوبت‌گیری سنجش سلامت (my.medu.ir)", "کنکور و ورود به دانشگاه‌ها"],
+        ["قوانین شهریه مدارس دولتی", "بازگشت به منوی اصلی"]
+      ],
+      sessionState: { step: "awaiting_education_topic" }
+    };
+  }
+
+  // 6. GPS Routing Trigger
+  if (text.includes("مسیریابی") || text.includes("نشان") || text.includes("بلد") || text.includes("gps") || text.includes("نقشه")) {
+    return {
+      replyText: `🗺 **مسیریابی مستقیم دفاتر کفالت با برنامه‌های نشان، بلد و نقشه**\n\nلطفاً نام استان محل اقامت خود را انتخاب فرمایید:`,
+      keyboard: [
+        ["تهران و شهرری", "خراسان رضوی (مشهد)"],
+        ["اصفهان", "فارس (شیراز)"],
+        ["قم", "البرز (کرج)"],
+        ["یزد و کرمان", "سایر استان‌ها"],
+        ["بازگشت به منوی اصلی"]
+      ],
+      sessionState: { step: "awaiting_gps_province" }
+    };
+  }
 
   if (text.includes("کفالت") || text.includes("دفتر") || text.includes("شعب") || text.includes("محله")) {
     return {
@@ -348,6 +683,64 @@ export async function processBotMessage(ctx: BotContext): Promise<BotResponse> {
         ["بازگشت به منوی اصلی"]
       ],
       sessionState: { step: "awaiting_lost_menu" }
+    };
+  }
+
+  // 11. Expiry Reminder Trigger
+  if (text.includes("یادآور") || text.includes("انقضا") || text.includes("هشدار")) {
+    return {
+      replyText: `⏰ **سامانه یادآور تاریخ انقضای مدارک (پیامکی و بات)**\n\nبرای جلوگیری از ابطال مدرک و جریمه‌های دیرکرد، تاریخ انقضای مدرک خود را ثبت کنید تا سیستم ۳۰ روز و ۱۰ روز قبل به شما پیامک هشدار ارسال کند.\n\n👇 لطفاً نوع مدرک خود را انتخاب یا ارسال نمایید:`,
+      keyboard: [
+        ["کارت آمایش و هوشمند", "گذرنامه و پاسپورت"],
+        ["روادید و ویزای سفر", "پروانه کار و اشتغال"],
+        ["بازگشت به منوی اصلی"]
+      ],
+      sessionState: { step: "awaiting_expiry_doc_type" }
+    };
+  }
+
+  // 12. Date Converter Trigger
+  if (text.includes("مبدل") || text.includes("تاریخ") || text.includes("سن تذکره") || text.includes("تبدیل")) {
+    return {
+      replyText: `📅 **مبدل تاریخ تذکره و محاسبه سن قانونی اتباع**\n\nتبدیل تاریخ هجری شمسی افغانستان به میلادی و بررسی شرایط سنی تحصیل و سن قانونی ۱۸ سال.\n\n👇 لطفاً **سال تولد** مندرج در تذکره خود را ارسال فرمایید (مثال: \`1380\` یا \`1368\`):`,
+      keyboard: [["۱۳۸۵ (۱۸ سال)", "۱۳۹۶ (کلاس اول)"], ["۱۳۸۰", "۱۳۷۰"], ["بازگشت به منوی اصلی"]],
+      sessionState: { step: "awaiting_date_convert_year" }
+    };
+  }
+
+  // 13. Driving Quiz Trigger
+  if (text.includes("آیین‌نامه") || text.includes("رانندگی") || text.includes("گواهینامه") || text.includes("تست")) {
+    return {
+      replyText: `🚗 **آزمون آیین‌نامه رانندگی اتباع و مهاجرین**\n\n❓ **سوال نمونه آزمون:**\nدر یک میدان فاقد چراغ راهنما، حق تقدم عبور با کدام وسیله نقلیه است؟\n\n۱) وسیله‌ای که سرعت بیشتری دارد\n۲) وسیله‌ای که از قبل در حریم میدان در حال گردش است\n۳) وسیله‌ای که قصد ورود به میدان را دارد\n۴) وسیله‌ای که چراغ راهنما زده است`,
+      keyboard: [
+        ["گزینه ۱ (سرعت بیشتر)", "گزینه ۲ (وسیله داخل میدان)"],
+        ["گزینه ۳ (ورود به میدان)", "گزینه ۴ (چراغ راهنما)"],
+        ["بازگشت به منوی اصلی"]
+      ],
+      sessionState: { step: "awaiting_driving_quiz_answer" }
+    };
+  }
+
+  // 14. Biometric Photo Standardizer Trigger
+  if (text.includes("عکس") || text.includes("پرسنلی") || text.includes("۴×۳") || text.includes("بیومتریک")) {
+    return {
+      replyText: `📷 **استانداردهای رسمی عکس پرسنلی ۴×۳ کنسولگری و دفاتر کفالت:**\n\n🔹 **ابعاد دقیق:** ۳ در ۴ سانتی‌متر (۳۰۰ DPI)\n🔹 **زمینه:** کاملاً سفید یکدست، بدون سایه و طرح\n🔹 **پوشش و چهره:** صورت تمام‌رخ، رو به دوربین، بدون عینک دودی، گوش‌ها و گردی صورت کاملاً آشکار، با حجاب اسلامی تیره برای بانوان\n🔹 **تاریخ عکس:** تهیه شده در ۶ ماه اخیر\n\n✂️ شما می‌توانید با مراجعه به **سایت دستیار مهاجر**، از ابزار آنلاین برش، تنظیم خودکار کادر و سفیدسازی پس‌زمینه عکس استفاده نمایید.`,
+      keyboard: MAIN_KEYBOARD,
+      sessionState: { step: "idle" }
+    };
+  }
+
+  // 15. Job Portal Trigger
+  if (text.includes("کاریابی") || text.includes("استخدام") || text.includes("شغل") || text.includes("کارفرما") || text.includes("کارجو")) {
+    return {
+      replyText: `💼 **سامانه کاریابی و اشتغال مجاز اتباع خارجی**\n\nاتصال مستقیم کارفرمایان و کارجویان در مشاغل مجاز، صنایع پوشاک، کارگاه‌های صنعتی، گلخانه‌ها و ساختمانی با امکان جای خواب و پروانه کار.\n\n👇 لطفاً اقدام مورد نظر را انتخاب فرمایید:`,
+      keyboard: [
+        ["🔍 مشاهده فرصت‌های شغلی مجاز"],
+        ["📢 ثبت آگهی استخدام (کارفرما)"],
+        ["👤 ثبت مشخصات و رزومه (کارجو)"],
+        ["بازگشت به منوی اصلی"]
+      ],
+      sessionState: { step: "awaiting_job_portal_action" }
     };
   }
 
@@ -712,6 +1105,511 @@ async function handleTrackingSearch(codeText: string): Promise<BotResponse> {
   }
 }
 
+// -------------------------------------------------------------
+// New Bot Services: Tazkira, AI Advisor, Fees, Forms, Education, GPS
+// -------------------------------------------------------------
+
+// 1. Tazkira Search Service
+async function handleTazkiraSearch(queryText: string): Promise<BotResponse> {
+  const q = queryText.trim().replace(/[ي]/g, "ی").replace(/[ك]/g, "ک").toLowerCase();
+
+  if (q === "بازگشت به منوی اصلی") {
+    return {
+      replyText: "بازگشت به منوی اصلی سیستم:",
+      keyboard: MAIN_KEYBOARD,
+      sessionState: { step: "idle" }
+    };
+  }
+
+  if (q === "جستجوی نام دیگر") {
+    return {
+      replyText: "لطفاً نام، نام خانوادگی یا نام پدر متقاضی را ارسال فرمایید:",
+      keyboard: [["نمایش آخرین تذکره‌های ارسالی"], ["بازگشت به منوی اصلی"]],
+      sessionState: { step: "awaiting_tazkira_search" }
+    };
+  }
+
+  try {
+    let allRecords: TazkiraRecord[] = [...INITIAL_TAZKIRAS];
+    try {
+      const snap = await getDocs(collection(db, "printed_tazkiras"));
+      const dbRecords = snap.docs.map(d => ({ id: d.id, ...d.data() } as TazkiraRecord));
+      if (dbRecords.length > 0) {
+        allRecords = [...dbRecords, ...allRecords];
+      }
+    } catch (_) {}
+
+    const isShowAll = q === "نمایش آخرین تذکره‌های ارسالی" || q === "همه" || q === "لیست";
+    const matches = isShowAll
+      ? allRecords.slice(0, 6)
+      : allRecords.filter(r => {
+          const fn = (r.fullName || "").replace(/[ي]/g, "ی").replace(/[ك]/g, "ک").toLowerCase();
+          const sn = (r.surname || "").replace(/[ي]/g, "ی").replace(/[ك]/g, "ک").toLowerCase();
+          const fa = (r.fatherName || "").replace(/[ي]/g, "ی").replace(/[ك]/g, "ک").toLowerCase();
+          const pr = (r.province || "").toLowerCase();
+          const bx = (r.boxNumber || "").toLowerCase();
+          const row = (r.rowNumber || "").toString();
+          return fn.includes(q) || sn.includes(q) || fa.includes(q) || pr.includes(q) || bx.includes(q) || row === q;
+        });
+
+    if (matches.length === 0) {
+      return {
+        replyText: `❌ موردی با مشخصات «${queryText}» در میان تذکره‌های آماده تحویل فعلی یافت نشد.\n\n💡 **راهنمای جستجو:**\n• نام یا نام خانوادگی را کوتاه وارد کنید (مثلاً: «جمشیدی»، «قاسمی» یا «احمد»).\n• یا نام پدر متقاضی را وارد کنید.\n• لیست‌ها به صورت دوره‌ای با رسیدن محموله‌های جدید سفارت به‌روزرسانی می‌شوند.`,
+        keyboard: [["نمایش آخرین تذکره‌های ارسالی"], ["جستجوی نام دیگر"], ["بازگشت به منوی اصلی"]],
+        sessionState: { step: "awaiting_tazkira_search" }
+      };
+    }
+
+    let reply = `✅ **نتایج استعلام تذکره‌های الکترونیکی (${matches.length} مورد یافت شد):**\n\n`;
+    matches.slice(0, 8).forEach((m, idx) => {
+      reply += `📌 **مورد ${idx + 1}:**\n`;
+      reply += `👤 **نام و نام خانوادگی:** ${m.fullName} ${m.surname || ""}\n`;
+      reply += `👴 **نام پدر:** ${m.fatherName}\n`;
+      reply += `📍 **ولایت:** ${m.province}\n`;
+      reply += `📦 **شماره قطعه (باکس تحویل):** قطعه ${m.boxNumber}\n`;
+      reply += `🔢 **ردیف در لیست:** ردیف ${m.rowNumber}\n`;
+      if (m.remarks) reply += `🗓 **تاریخ/کد محموله:** ${m.remarks}\n`;
+      reply += `🟢 **وضعیت:** آماده تحویل در بخش کنسولی سفارت\n`;
+      reply += `------------------------------------\n`;
+    });
+
+    reply += `\n💡 **مدارک لازم جهت تحویل تذکره در سفارت/کنسولگری:**\n۱. اصل برگه رسید و نوبت بایومتریک\n۲. تذکره قبلی (در صورت وجود)\n۳. مدرک شناسایی عکس‌دار معتبر متقاضی یا سرپرست`;
+
+    return {
+      replyText: reply,
+      keyboard: [["جستجوی نام دیگر"], ["بازگشت به منوی اصلی"]],
+      sessionState: { step: "awaiting_tazkira_search" }
+    };
+  } catch (err: any) {
+    return {
+      replyText: `خطا در جستجوی تذکره: ${err.message}`,
+      keyboard: MAIN_KEYBOARD,
+      sessionState: { step: "idle" }
+    };
+  }
+}
+
+// 2. AI Advisor Service
+async function handleAiAdvisorQuestion(queryText: string): Promise<BotResponse> {
+  const q = queryText.trim();
+
+  if (q === "بازگشت به منوی اصلی") {
+    return {
+      replyText: "بازگشت به منوی اصلی سیستم:",
+      keyboard: MAIN_KEYBOARD,
+      sessionState: { step: "idle" }
+    };
+  }
+
+  // Try calling AI backend endpoint if in environment with fetch
+  try {
+    if (typeof fetch !== "undefined") {
+      const resp = await fetch("/api/ai/legal-advisor", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: q, topic: "general" })
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.answer) {
+          return {
+            replyText: `🤖 **پاسخ مشاور هوشمند اقامتی:**\n\n${data.answer}\n\n⚠️ *نکته: این پاسخ بر اساس آخرین آیین‌نامه‌ها و بخشنامه‌های سازمان ملی مهاجرت و اداره کل امور اتباع ارائه شده است.*`,
+            keyboard: [
+              ["پرسش سوال دیگر از مشاور", "شرایط گواهینامه رانندگی مهاجرین"],
+              ["افتتاح حساب بانکی و کارت عابر", "بازگشت به منوی اصلی"]
+            ],
+            sessionState: { step: "awaiting_ai_advisor_question" }
+          };
+        }
+      }
+    }
+  } catch (_) {}
+
+  // Fallback expert knowledge base
+  let answer = "";
+  const lower = q.toLowerCase();
+
+  if (lower.includes("گواهینامه") || lower.includes("رانندگی") || lower.includes("ماشین") || lower.includes("موتور")) {
+    answer = `🚗 **شرایط و مدارک دریافت گواهینامه رانندگی اتباع:**\n\n۱. **شرط مدارک هویتی:** متقاضی باید دارای گذرنامه معتبر با اقامت قانونی تمدیدشده (دانشجویی، کاری یا خانواری) باشد. با برگه سرشماری به تنهایی امکان اخذ گواهینامه وجود ندارد.\n۲. **معرفی‌نامه:** دریافت معرفی‌نامه از اداره کل امور اتباع و مهاجرین خارجی استان محل سکونت.\n۳. **کد فراگیر/یکتا:** دارا بودن کد یکتای معتبر در سامانه سهما.\n۴. **مراحل آموزشگاه:** ثبت‌نام در آموزشگاه‌های رانندگی مجاز، گذراندن کلاس‌های تئوری و عملی و قبولی در آزمون‌های آیین‌نامه و شهر.\n۵. **اعتبار:** گواهینامه صادره به صورت یک‌ساله و با تمدید اقامت قابل تمدید است.`;
+  } else if (lower.includes("بانک") || lower.includes("کارت") || lower.includes("حساب") || lower.includes("عابر")) {
+    answer = `💳 **راهنمای افتتاح حساب بانکی و کارت عابربانک اتباع:**\n\n۱. **بانک‌های مجاز:** بر اساس بخشنامه بانک مرکزی، بانک‌های ملی، سپه، صادرات، تجارت و ملت موظف به ارائه خدمات پایه بانکی به مهاجرین مجاز هستند.\n۲. **مدارک لازم:** اصل مدرک اقامتی معتبر (کارت آمایش معتبر، گذرنامه اقامتی، یا کارت هوشمند)، کد یکتا/فراگیر معتبر و کد پستی تاییدشده محل سکونت.\n۳. **سقف تراکنش:** سقف برداشت روزانه و کارت به کارت مطابق بخشنامه شاپرک برای مشتریان اتباع تعیین شده و کارت‌های دارای تاریخ انقضا باید به همراه مدرک هویتی تمدید شوند.\n۴. **همراه‌بانک:** فعال‌سازی همراه بانک با ثبت شماره موبایلی که به نام خود شخص ثبت شده باشد الزامی است.`;
+  } else if (lower.includes("تردد") || lower.includes("سفر") || lower.includes("بین استانی") || lower.includes("برگه تردد")) {
+    answer = `🛣 **نحوه دریافت برگه تردد بین استانی:**\n\n۱. **مرجع صدور:** دفاتر خدمات اقامت و اشتغال اتباع (دفاتر کفالت) یا سامانه یکپارچه سهما.\n۲. **علت موجه:** درمان پزشکی (به همراه نامه پزشک)، زیارت، امور تحصیلی و دانشگاهی، یا دعاوی اداری و قضایی.\n۳. **مدت اعتبار:** برگه‌های تردد معمولاً بین ۵ تا ۱۵ روز صادر می‌شوند.\n۴. **هشدار:** تردد به استان‌های ممنوعه برای اتباع بدون مجوز کتبی اداره اتباع غیرمجاز بوده و موجب لغو اقامت یا جریمه انتظامی می‌گردد.`;
+  } else if (lower.includes("خروج") || lower.includes("مراجعت") || lower.includes("افغانستان") || lower.includes("سفر به کشور")) {
+    answer = `✈️ **قوانین خروج و مراجعت به افغانستان:**\n\n۱. **گذرنامه اقامتی:** اتباع دارای گذرنامه با روادید معتبر باید به پلیس اطلاعات و امنیت مهاجرت (یا دفاتر کفالت مجری) مراجعه و مهر خروج و مراجعت دریافت دارند.\n۲. **مدت مجاز خارج از کشور:** معمولاً تا ۳ ماه اجازه اقامت در افغانستان بدون ابطال اقامت ایران داده می‌شود.\n۳. **دارندگان کارت آمایش:** خروج از کشور با کارت آمایش به منزله انصراف از پناهندگی تلقی شده مگر در طرح‌های بازگشت داوطلبانه با هماهنگی کمیساریای عالی پناهندگان.`;
+  } else if (lower.includes("کارت هوشمند") || lower.includes("یکتا") || lower.includes("سهما")) {
+    answer = `🪪 **طرح کارت هوشمند و کد یکتا مهاجرین:**\n\n۱. هدف کارت هوشمند، تجمیع تمام کارت‌های قبلی (آمایش، بانکی، سیم‌کارت و بیمه) در یک کارت یکپارچه است.\n۲. کلیه مراحل از طریق ثبت‌نام اولیه در سامانه سهما (irmigrationorg.ir) و مراجعه به دفتر کفالت تعیین‌شده انجام می‌شود.\n۳. ارائه کد یکتای ۱۰ رقمی برای تمام امور اداری، ثبت‌نام فرزندان در مدارس و دریافت گواهی اشتغال الزامی است.`;
+  } else {
+    answer = `📌 **راهنمای حقوقی و اداری در پاسخ به «${q}»:**\n\n• کلیه امور اقامتی مهاجرین در ایران تحت نظارت سازمان ملی مهاجرت و از طریق دفاتر خدمات اقامت و اشتغال (دفاتر کفالت) انجام می‌پذیرد.\n• همراه داشتن اصل مدرک معتبر هویتی و کد یکتا در تمامی مراجعات اداری ضروری است.\n• در صورت نیاز به بررسی دقیق پرونده، پیشنهاد می‌شود از بخش «جستجوی دفاتر کفالت» با نزدیک‌ترین دفتر تماس حاصل فرمایید.`;
+  }
+
+  return {
+    replyText: `🤖 **پاسخ مشاور هوشمند اقامتی:**\n\n${answer}`,
+    keyboard: [
+      ["پرسش سوال دیگر از مشاور", "شرایط گواهینامه رانندگی مهاجرین"],
+      ["افتتاح حساب بانکی و کارت عابر", "بازگشت به منوی اصلی"]
+    ],
+    sessionState: { step: "awaiting_ai_advisor_question" }
+  };
+}
+
+// 3. Fee Calculator Service
+async function handleFeeCalculator(optionText: string): Promise<BotResponse> {
+  const opt = optionText.trim();
+
+  if (opt === "بازگشت به منوی اصلی") {
+    return {
+      replyText: "بازگشت به منوی اصلی سیستم:",
+      keyboard: MAIN_KEYBOARD,
+      sessionState: { step: "idle" }
+    };
+  }
+
+  if (opt.includes("محاسبه کل هزینه‌ها برای خانواده") || opt.includes("خانواده")) {
+    return {
+      replyText: `👨‍👩‍👧‍👦 **محاسبه هوشمند هزینه‌ها برای کل خانوار:**\n\nلطفاً **تعداد کل اعضای خانواده** خود را به صورت عدد ارسال فرمایید (مثال: \`4\`):`,
+      keyboard: [["1", "2", "3"], ["4", "5", "6"], ["بازگشت به منوی اصلی"]],
+      sessionState: { step: "awaiting_family_count" }
+    };
+  }
+
+  if (opt.includes("۵ ساله") || opt.includes("5 ساله") || opt.includes("120")) {
+    return {
+      replyText: `🛂 **تعرفه صدور/تمدید پاسپورت ۵ ساله ماشین‌خوان:**\n\n• **تعرفه دلاری مصوب سفارت:** ۱۲۰ دلار آمریکا\n• **معادل تقریبی ریالی:** حدود ۱۰,۸۰۰,۰۰۰ الی ۱۱,۴۰۰,۰۰۰ تومان (با نرخ روز صرافی)\n• **هزینه خدمات دفتر کنسولی:** مصوب ریالی خدمات بایومتریک و پست\n\n📄 **مدارک لازم:**\n۱. اصل تذکره تابعیت تاییدشده (یا تذکره الکترونیک)\n۲. ۴ قطعه عکس ۴×۳ زمینه سفید جدید\n۳. کپی مدرک اقامتی ایران\n۴. تکمیل فرم مشخصات فردی`,
+      keyboard: [
+        ["پاسپورت ۲ ساله (۲۰ دلار)", "تثبیت هویت و تذکره سفارت"],
+        ["محاسبه کل هزینه‌ها برای خانواده", "بازگشت به منوی اصلی"]
+      ],
+      sessionState: { step: "awaiting_fee_calc_menu" }
+    };
+  }
+
+  if (opt.includes("۲ ساله") || opt.includes("2 ساله") || opt.includes("20")) {
+    return {
+      replyText: `🛂 **تعرفه تمدید پاسپورت دست‌نویس (۲ ساله):**\n\n• **تعرفه مصوب سفارت:** ۲۰ دلار آمریکا\n• **معادل تقریبی ریالی:** حدود ۱,۸۰۰,۰۰۰ الی ۱,۹۵۰,۰۰۰ تومان\n• **نکته مهم:** بر اساس مقررات ایکائو (ICAO)، تمدید پاسپورت‌های دست‌نویس رو به پایان است و اولویت با تعویض به پاسپورت ۵ ساله الکترونیک می‌باشد.`,
+      keyboard: [
+        ["تمدید پاسپورت ۵ ساله (۱۲۰ دلار)", "تثبیت هویت و تذکره سفارت"],
+        ["محاسبه کل هزینه‌ها برای خانواده", "بازگشت به منوی اصلی"]
+      ],
+      sessionState: { step: "awaiting_fee_calc_menu" }
+    };
+  }
+
+  if (opt.includes("تثبیت هویت") || opt.includes("تذکره")) {
+    return {
+      replyText: `🏛 **تعرفه تثبیت هویت و صدور تذکره:**\n\n• **گواهی تثبیت هویت سفارت:** ۵۰ دلار آمریکا (~۴,۵۰۰,۰۰۰ تومان)\n• **تذکره الکترونیکی:** ۱۰ دلار آمریکا (~۹۰۰,۰۰۰ تومان)\n• **تایید اسناد و وکالت‌نامه:** تعرفه از ۲۰ الی ۵۰ دلار بسته به نوع سند\n\n📄 **مدارک لازم:**\n• اصل یا رونوشت تذکره اقارب اصولی (پدر، پدربزرگ، برادر)\n• عکس پرسنلی رنگی و حضور دو نفر شاهد شرعی`,
+      keyboard: [
+        ["تمدید پاسپورت ۵ ساله (۱۲۰ دلار)", "هزینه‌های دفتر کفالت و پروانه کار"],
+        ["محاسبه کل هزینه‌ها برای خانواده", "بازگشت به منوی اصلی"]
+      ],
+      sessionState: { step: "awaiting_fee_calc_menu" }
+    };
+  }
+
+  if (opt.includes("کفالت") || opt.includes("پروانه کار") || opt.includes("کارت کار")) {
+    return {
+      replyText: `🏢 **تعرفه‌های مصوب دفاتر کفالت و کارت کار:**\n\n• **نوبت‌گیری و خدمات اداری دفتر کفالت:** تعرفه مصوب ریالی (حدود ۴۵۰,۰۰۰ تومان)\n• **تمدید کارت کارگری (پروانه اشتغال):** حدود ۱,۸۰۰,۰۰۰ الی ۲,۴۰۰,۰۰۰ تومان بر اساس رشته شغلی\n• **بیمه حوادث و درمان:** مطابق قرارداد شرکت بیمه‌گر طرف قرارداد\n• **هزینه صدور کارت هوشمند:** تعرفه مصوب ابلاغی سازمان ملی مهاجرت`,
+      keyboard: [
+        ["تمدید پاسپورت ۵ ساله (۱۲۰ دلار)", "تثبیت هویت و تذکره سفارت"],
+        ["محاسبه کل هزینه‌ها برای خانواده", "بازگشت به منوی اصلی"]
+      ],
+      sessionState: { step: "awaiting_fee_calc_menu" }
+    };
+  }
+
+  return {
+    replyText: `لطفاً یکی از خدمات زیر را انتخاب فرمایید تا تعرفه و ریز هزینه‌ها نمایش داده شود:`,
+    keyboard: [
+      ["تمدید پاسپورت ۵ ساله (۱۲۰ دلار)", "پاسپورت ۲ ساله (۲۰ دلار)"],
+      ["تثبیت هویت و تذکره سفارت", "هزینه‌های دفتر کفالت و پروانه کار"],
+      ["محاسبه کل هزینه‌ها برای خانواده", "بازگشت به منوی اصلی"]
+    ],
+    sessionState: { step: "awaiting_fee_calc_menu" }
+  };
+}
+
+function handleFamilyCountCalculation(countText: string): BotResponse {
+  const count = parseInt(countText.replace(/[^0-9]/g, ""), 10);
+
+  if (isNaN(count) || count <= 0 || count > 20) {
+    return {
+      replyText: `لطفاً تعداد اعضای خانواده را با یک عدد معتبر (مثلاً 4) ارسال فرمایید:`,
+      keyboard: [["1", "2", "3"], ["4", "5", "6"], ["بازگشت به منوی اصلی"]],
+      sessionState: { step: "awaiting_family_count" }
+    };
+  }
+
+  const passportPerPerson = 120; // USD
+  const totalPassportUsd = count * passportPerPerson;
+  const tomanRate = 92000;
+  const totalPassportToman = totalPassportUsd * tomanRate;
+
+  const kafalatPerPersonToman = 450000;
+  const totalKafalatToman = count * kafalatPerPersonToman;
+
+  const grandTotalToman = totalPassportToman + totalKafalatToman;
+
+  const fmt = (n: number) => n.toLocaleString("fa-IR");
+
+  const reply = `👨‍👩‍👧‍👦 **برآورد بودجه برای خانوار ${count} نفره:**\n\n` +
+    `🛂 **۱. پاسپورت ۵ ساله برای ${count} نفر:**\n` +
+    `• تعرفه دلاری: **${totalPassportUsd} دلار** ($${passportPerPerson} × ${count})\n` +
+    `• معادل ریالی تقریبی: **${fmt(totalPassportToman)} تومان**\n\n` +
+    `🏢 **۲. خدمات دفاتر کفالت و بایومتریک:**\n` +
+    `• تعرفه ریالی: **${fmt(totalKafalatToman)} تومان**\n\n` +
+    `📊 **جمع کل برآورد هزینه‌ها:**\n` +
+    `💰 **حدود ${fmt(grandTotalToman)} تومان** (به علاوه هزینه‌های عکس، کپی و پست)\n\n` +
+    `💡 **پیشنهاد مشاور:** می‌توانید هزینه‌های دلاری را پیش از مراجعه به سفارت تهیه فرمایید و فیش‌های بانکی دفاتر کفالت را از طریق پایانه‌های متصل به شتاب پرداخت نمایید.`;
+
+  return {
+    replyText: reply,
+    keyboard: [
+      ["تمدید پاسپورت ۵ ساله (۱۲۰ دلار)", "تثبیت هویت و تذکره سفارت"],
+      ["محاسبه برای تعداد نفرات دیگر", "بازگشت به منوی اصلی"]
+    ],
+    sessionState: { step: "awaiting_fee_calc_menu" }
+  };
+}
+
+// 4. Consular Form Builder Service
+function handleFormTypeSelection(typeText: string): BotResponse {
+  const t = typeText.trim();
+
+  if (t === "بازگشت به منوی اصلی") {
+    return {
+      replyText: "بازگشت به منوی اصلی سیستم:",
+      keyboard: MAIN_KEYBOARD,
+      sessionState: { step: "idle" }
+    };
+  }
+
+  let formLabel = "فرم درخواستی";
+  if (t.includes("تثبیت")) formLabel = "فرم درخواست تثبیت هویت سفارت";
+  else if (t.includes("وکالت")) formLabel = "وکالت‌نامه رسمی اداری و کاری";
+  else if (t.includes("استشهاد")) formLabel = "استشهاد محلی تایید هویت شرعی";
+  else if (t.includes("رضایت")) formLabel = "رضایت‌نامه سفر و خروج ولی قانونی";
+
+  return {
+    replyText: `سند انتخابی: **${formLabel}**\n\nلطفاً **نام و نام خانوادگی کامل متقاضی** را ارسال فرمایید (مثال: \`محمد علی احمدی\`):`,
+    keyboard: [["بازگشت به منوی اصلی"]],
+    sessionState: { step: "awaiting_form_name", formType: formLabel }
+  };
+}
+
+function generateOfficialFormText(state: Record<string, any>): BotResponse {
+  const formType = state.formType || "سند حقوقی";
+  const fullName = state.fullName || "فلان بن فلان";
+  const fatherName = state.fatherName || "نامشخص";
+  const province = state.province || "کابل";
+  const docNumber = state.docNumber || "---";
+  const todayDate = new Date().toLocaleDateString("fa-IR");
+
+  let docBody = "";
+
+  if (formType.includes("تثبیت")) {
+    docBody = `بسم الله الرحمن الرحیم\n\nبه: بخش قنسولی محترم سفارت کبرا / جنرال قنسولگری\nموضوع: درخواست تثبیت هویت و صدور تذکره الکترونیکی\nتاریخ تنظیم: ${todayDate}\n\nاینجانب: **${fullName}**\nفرزند: **${fatherName}**\nمتولد و ساکن ولایت: **${province}**\nدارنده مدرک/کد رهگیری: **${docNumber}**\n\nمحترمانه به استحضار می‌رسانم که اینجانب جهت انجام امور اداری و دریافت تذکره الکترونیک و پاسپورت، نیازمند تثبیت هویت می‌باشم. بدین‌وسیله صحت تمامی اسناد پیوست و مشخصات فوق را تحت مسئولیت شرعی و قانونی تایید نموده و تقاضای صدور برگ تثبیت هویت را دارم.\n\nنام و امضای متقاضی: ....................\nاثر انگشت سبابه دست راست: [محل اثر انگشت]`;
+  } else if (formType.includes("وکالت")) {
+    docBody = `بسمه تعالی\n\n**وکالت‌نامه رسمی کاری و اداری**\nتاریخ تنظیم: ${todayDate}\n\n**موکل:** اینجانب ${fullName} فرزند ${fatherName}، اهل ولایت ${province}، به شماره مدرک ${docNumber}.\n\n**وکیل:** [نام وکیل و مشخصات کامل در این بخش درج گردد]\n\n**حدود اختیارات:**\nوکیل مرقوم مجاز است جهت مراجعه به کلیه مراجع اداری، دفاتر کفالت خدمات اقامت و اشتغال، ارگان‌های مربوط به سازمان ملی مهاجرت، اخذ مدارک، امضای اسناد و پرداخت هزینه‌های قانونی از طرف اینجانب اقدام نماید. مفاد این سند تا اتمام موضوع مورد وکالت نافذ و معتبر است.\n\nامضای موکل: ....................\nامضای وکیل: ....................`;
+  } else if (formType.includes("استشهاد")) {
+    docBody = `بسم الله الرحمن الرحیم\n\n**استشهاد محلی تایید هویت و تابعیت**\nتاریخ: ${todayDate}\n\nبدین‌وسیله از کلیه مومنین و مطلعین که از هویت و تابعیت اینجانب:\nآقا/خانم: **${fullName}**\nفرزند: **${fatherName}**\nاصالتاً اهل ولایت: **${province}**، شماره مدرک: **${docNumber}**\nاطلاع شرعی و عینی دارند، تقاضا می‌شود مراتب را کتباً گواهی و امضا فرمایند.\n\nگواهان شرعی:\n۱. اینجانب ................. فرزند ................. با شماره تماس ................. هویت نامبرده را تایید می‌نمایم. [امضا/اثر انگشت]\n۲. اینجانب ................. فرزند ................. با شماره تماس ................. هویت نامبرده را تایید می‌نمایم. [امضا/اثر انگشت]`;
+  } else {
+    docBody = `بسمه تعالی\n\n**رضایت‌نامه رسمی ولی قانونی جهت سفر و امور اداری**\nتاریخ: ${todayDate}\n\nاینجانب: **${fatherName}** (ولی/سرپرست قانونی)\nبه عنوان ولی قهری فرزندم: **${fullName}**، به شماره مدرک: **${docNumber}**، ساکن استان/ولایت: **${province}**\n\nرضایت کامل و بلاشرط خود را جهت ثبت‌نام، سفر، دریافت گذرنامه و خدمات اداری و آموزشی نامبرده اعلام می‌دارم.\n\nامضا و اثر انگشت ولی: ....................`;
+  }
+
+  const reply = `📄 **متن سند رسمی شما آماده شد:**\n\n` +
+    `────────────────────\n` +
+    `${docBody}\n` +
+    `────────────────────\n\n` +
+    `📋 **نحوه استفاده:**\n` +
+    `متن فوق را کپی نموده، بر روی کاغذ پرینت فرمایید و پس از امضا و اثر انگشت به همراه مدارک پیوست به بخش کنسولی یا دفتر مربوطه ارائه فرمایید.`;
+
+  return {
+    replyText: reply,
+    keyboard: [
+      ["تولید فرم دیگر", "📋 فرم‌ساز اسناد کنسولی"],
+      ["بازگشت به منوی اصلی"]
+    ],
+    sessionState: { step: "idle" }
+  };
+}
+
+// 5. Education Guide Service
+function handleEducationGuide(topicText: string): BotResponse {
+  const t = topicText.trim();
+
+  if (t === "بازگشت به منوی اصلی") {
+    return {
+      replyText: "بازگشت به منوی اصلی سیستم:",
+      keyboard: MAIN_KEYBOARD,
+      sessionState: { step: "idle" }
+    };
+  }
+
+  if (t.includes("آمایش") || t.includes("پاسپورت") || t.includes("مدارس با آمایش")) {
+    return {
+      replyText: `🎒 **ثبت‌نام مدارس دولتی با کارت آمایش و گذرنامه اقامتی:**\n\n۱. **فرآیند ثبت‌نام:** کلیه دانش‌آموزان دارای کارت آمایش معتبر یا گذرنامه با اقامت معتبر می‌توانند همانند دانش‌آموزان ایرانی در نزدیک‌ترین مدرسه محل سکونت ثبت‌نام نمایند.\n۲. **کد یکتا:** دریافت کد یکتای دانش‌آموزی از سامانه سهما (یا دفتر کفالت) پیش‌نیاز ثبت‌نام در سامانه سیدا و مای مدیو است.\n۳. **مدارک:** اصل کارت آمایش یا گذرنامه، اصل کارنامه سال قبل، برگه سنجش سلامت (برای پایه اول)، و فرم مشخصات مسکن.\n۴. **محدوده سکونت:** ثبت‌نام مطابق کروکی و آدرس کد پستی مندرج در مدرک اقامتی انجام می‌شود.`,
+      keyboard: [
+        ["برگه حمایت تحصیلی فاقدین مدرک", "نوبت‌گیری سنجش سلامت (my.medu.ir)"],
+        ["قوانین شهریه مدارس دولتی", "بازگشت به منوی اصلی"]
+      ],
+      sessionState: { step: "awaiting_education_topic" }
+    };
+  }
+
+  if (t.includes("حمایت تحصیلی") || t.includes("فاقدین مدرک") || t.includes("سرشماری")) {
+    return {
+      replyText: `📜 **برگه حمایت تحصیلی برای دانش‌آموزان سرشماری‌شده و فاقد مدرک:**\n\n• **فرمان رهبری:** هیچ کودک و دانش‌آموز افغانستانی حتی بدون مدرک نباید از تحصیل بازبماند.\n• **نحوه دریافت برگه:**\n۱. مراجعه به سامانه سهما (irmigrationorg.ir) یا دفتر کفالت در موعد ثبت‌نام سال تحصیلی.\n۲. اخذ نوبت صدور برگه حمایت تحصیلی و پرداخت تعرفه اداری.\n۳. انجام معاینات پزشکی و آزمایشات در مراکز بهداشت مورد تایید.\n۴. ارائه برگه نهایی صادرشده از دفتر کفالت به مدیر مدرسه دولتی.`,
+      keyboard: [
+        ["ثبت‌نام مدارس با آمایش و پاسپورت", "نوبت‌گیری سنجش سلامت (my.medu.ir)"],
+        ["قوانین شهریه مدارس دولتی", "بازگشت به منوی اصلی"]
+      ],
+      sessionState: { step: "awaiting_education_topic" }
+    };
+  }
+
+  if (t.includes("سنجش") || t.includes("my.medu.ir") || t.includes("پایه اول")) {
+    return {
+      replyText: `🩺 **نوبت‌گیری سنجش سلامت پایه اول ابتدایی و پیش‌دبستانی:**\n\n۱. **سامانه:** سامانه پنجره واحد خدمات الکترونیک آموزش و پرورش (\`my.medu.ir\`).\n۲. **نحوه ورود:** انتخاب گزینه «ورود والدین اتباع» و درج کد یکتای دانش‌آموز و شماره موبایل ثبت‌شده.\n۳. **مراحل سنجش:** بینایی‌سنجی، شنوایی‌سنجی، آمادگی تحصیلی و بررسی کارت واکسیناسیون در پایگاه سنجش تعیین‌شده.\n۴. **الزام:** بدون ثبت نتیجه سنجش سلامت در سامانه سیدا، ثبت‌نام قطعی پایه اول امکان‌پذیر نیست.`,
+      keyboard: [
+        ["ثبت‌نام مدارس با آمایش و پاسپورت", "برگه حمایت تحصیلی فاقدین مدرک"],
+        ["کنکور و ورود به دانشگاه‌ها", "بازگشت به منوی اصلی"]
+      ],
+      sessionState: { step: "awaiting_education_topic" }
+    };
+  }
+
+  if (t.includes("کنکور") || t.includes("دانشگاه")) {
+    return {
+      replyText: `🎓 **شرایط کنکور سراسری و ادامه تحصیل اتباع در دانشگاه‌ها:**\n\n۱. **کد پیگیری اتباع:** دریافت کد رهگیری ۱۲ رقمی از سایت سازمان سنجش پیش از ثبت‌نام کنکور.\n۲. **شرایط اقامتی:** داشتن گذرنامه با روادید تحصیلی برای پذیرفته‌شدگان قطعی الزامی است (تبدیل کارت آمایش به گذرنامه دانشجویی).\n۳. **انتخاب رشته:** تحصیل در رشته‌های دارای تعهد خدمت و مناطق ممنوعه تردد اتباع بر اساس دفترچه شماره ۲ کنکور محدودیت دارد.\n۴. **شهریه دانشگاه‌ها:** در دانشگاه‌های دولتی نوبت روزانه در برخی سهمیه‌ها معاف و در دانشگاه‌های آزاد، پیام نور و پردیس خودگردان مطابق مصوبات وزارت علوم محاسبه می‌شود.`,
+      keyboard: [
+        ["ثبت‌نام مدارس با آمایش و پاسپورت", "برگه حمایت تحصیلی فاقدین مدرک"],
+        ["قوانین شهریه مدارس دولتی", "بازگشت به منوی اصلی"]
+      ],
+      sessionState: { step: "awaiting_education_topic" }
+    };
+  }
+
+  if (t.includes("شهریه") || t.includes("بخشنامه")) {
+    return {
+      replyText: `💵 **بخشنامه‌های مربوط به شهریه مدارس دولتی:**\n\n• بر اساس بخشنامه رسمی وزارت آموزش و پرورش، دریافت هرگونه وجه اجباری تحت عنوان «شهریه اتباع» در مدارس دولتی ممنوع است.\n• هزینه‌های پرداختی فقط شامل بیمه دانش‌آموزی و بهای کتب درسی رسمی کشور است.\n• مبالغ مربوط به کمک به مدرسه و انجمن اولیا و مربیان کاملاً اختیاری و داوطلبانه می‌باشد.\n• در صورت تخلف یا مطالبه مبالغ غیرقانونی، امکان ثبت شکایت در سامانه بازرسی آموزش و پرورش (\`shekayat.medu.ir\`) وجود دارد.`,
+      keyboard: [
+        ["ثبت‌نام مدارس با آمایش و پاسپورت", "نوبت‌گیری سنجش سلامت (my.medu.ir)"],
+        ["بازگشت به منوی اصلی"]
+      ],
+      sessionState: { step: "awaiting_education_topic" }
+    };
+  }
+
+  return {
+    replyText: `لطفاً یکی از بخش‌های زیر را جهت مشاهده راهنمای تحصیلی انتخاب فرمایید:`,
+    keyboard: [
+      ["ثبت‌نام مدارس با آمایش و پاسپورت", "برگه حمایت تحصیلی فاقدین مدرک"],
+      ["نوبت‌گیری سنجش سلامت (my.medu.ir)", "کنکور و ورود به دانشگاه‌ها"],
+      ["قوانین شهریه مدارس دولتی", "بازگشت به منوی اصلی"]
+    ],
+    sessionState: { step: "awaiting_education_topic" }
+  };
+}
+
+// 6. GPS Routing Service with Neshan, Balad, and Google Maps Links
+const GPS_PROVINCES: Record<string, Array<{ name: string; address: string; phone: string; lat: number; lng: number }>> = {
+  "تهران": [
+    { name: "دفتر کفالت ۱۰۱ تهران (شهرری)", address: "شهرری، میدان معلم، خیابان زکریای رازی", phone: "۰۲۱۵۵۹۰۰۱۱۱", lat: 35.5900, lng: 51.4350 },
+    { name: "دفتر کفالت ۱۰۳ ورامین", address: "ورامین، خیابان مسجد جامع، مجتمع نگین", phone: "۰۲۱۳۶۲۷۰۰۲۲", lat: 35.3242, lng: 51.6480 },
+    { name: "دفتر کفالت ۱۰۵ پاکدشت", address: "پاکدشت، دوراهی یبر، بلوار شهدای قمی", phone: "۰۲۱۳۶۰۲۰۰۳۳", lat: 35.5312, lng: 51.6780 }
+  ],
+  "مشهد": [
+    { name: "دفتر کفالت ۲۰۱ مشهد (گلشهر)", address: "مشهد، گلشهر، بلوار شهید آوینی، آوینی ۱۷", phone: "۰۵۱۳۲۵۹۰۰۴۴", lat: 36.2972, lng: 59.6067 },
+    { name: "دفتر کفالت ۲۰۳ مشهد (طبرسی)", address: "مشهد، بلوار طبرسی شمالی، طبرسی ۲۸", phone: "۰۵۱۳۲۱۵۰۰۵۵", lat: 36.3120, lng: 59.6350 }
+  ],
+  "اصفهان": [
+    { name: "دفتر کفالت ۳۰۱ اصفهان (زینبیه)", address: "اصفهان، خیابان زینبیه، جنب ایستگاه مترو", phone: "۰۳۱۳۵۵۱۰۰۶۶", lat: 32.6546, lng: 51.6680 },
+    { name: "دفتر کفالت ۳۰۲ فلاورجان", address: "فلاورجان، خیابان امام خمینی، جنب فرمانداری", phone: "۰۳۱۳۷۴۲۰۰۷۷", lat: 32.5530, lng: 51.5120 }
+  ],
+  "فارس": [
+    { name: "دفتر کفالت ۴۰۱ شیراز (محراب)", address: "شیراز، بلوار مدرس، خیابان محراب", phone: "۰۷۱۳۷۲۶۰۰۸۸", lat: 29.5918, lng: 52.5837 }
+  ],
+  "قم": [
+    { name: "دفتر کفالت ۵۰۱ قم (پردیسان)", address: "قم، شهرک پردیسان، بلوار دانشگاه، مجتمع امیر", phone: "۰۲۵۳۲۸۰۰۰۹۹", lat: 34.6399, lng: 50.8759 }
+  ],
+  "البرز": [
+    { name: "دفتر کفالت ۶۰۱ کرج (فردیس)", address: "کرج، فردیس، فلکه چهارم، خیابان ۴۷ جدید", phone: "۰۲۶۳۶۵۰۰۰۱۱", lat: 35.8327, lng: 50.9915 }
+  ],
+  "یزد": [
+    { name: "دفتر کفالت ۷۰۱ یزد", address: "یزد، بلوار ۱۷ شهریور، نرسیده به میدان معلم", phone: "۰۳۵۳۷۲۵۰۰۲۲", lat: 31.8974, lng: 54.3569 }
+  ],
+  "کرمان": [
+    { name: "دفتر کفالت ۸۰۱ کرمان", address: "کرمان، بلوار جمهوری اسلامی، نبش کوچه ۲۰", phone: "۰۳۴۳۲۴۴۰۰۳۳", lat: 30.2839, lng: 57.0788 }
+  ]
+};
+
+async function handleGpsRouting(provinceQuery: string): Promise<BotResponse> {
+  const p = provinceQuery.trim();
+
+  if (p === "بازگشت به منوی اصلی") {
+    return {
+      replyText: "بازگشت به منوی اصلی سیستم:",
+      keyboard: MAIN_KEYBOARD,
+      sessionState: { step: "idle" }
+    };
+  }
+
+  let matchedKey = "";
+  if (p.includes("تهران") || p.includes("شهرری")) matchedKey = "تهران";
+  else if (p.includes("مشهد") || p.includes("خراسان")) matchedKey = "مشهد";
+  else if (p.includes("اصفهان")) matchedKey = "اصفهان";
+  else if (p.includes("شیراز") || p.includes("فارس")) matchedKey = "فارس";
+  else if (p.includes("قم")) matchedKey = "قم";
+  else if (p.includes("البرز") || p.includes("کرج")) matchedKey = "البرز";
+  else if (p.includes("یزد")) matchedKey = "یزد";
+  else if (p.includes("کرمان")) matchedKey = "کرمان";
+
+  if (!matchedKey || !GPS_PROVINCES[matchedKey]) {
+    return {
+      replyText: `🗺 **مسیریابی دفاتر کفالت با نشان، بلد و نقشه:**\n\nلطفاً یکی از استان‌های زیر را جهت مشاهده لیست شعب و لینک‌های مسیریابی انتخاب فرمایید:`,
+      keyboard: [
+        ["تهران و شهرری", "خراسان رضوی (مشهد)"],
+        ["اصفهان", "فارس (شیراز)"],
+        ["قم", "البرز (کرج)"],
+        ["یزد و کرمان", "سایر استان‌ها"],
+        ["بازگشت به منوی اصلی"]
+      ],
+      sessionState: { step: "awaiting_gps_province" }
+    };
+  }
+
+  const offices = GPS_PROVINCES[matchedKey];
+  let reply = `📍 **شعب و دفاتر کفالت فعال در استان ${matchedKey}:**\n\n`;
+
+  offices.forEach((o, i) => {
+    const neshanUrl = `https://neshan.org/maps/@${o.lat},${o.lng},16z`;
+    const baladUrl = `https://balad.ir/location?latitude=${o.lat}&longitude=${o.lng}`;
+    const gmapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${o.lat},${o.lng}`;
+
+    reply += `🏢 **${i + 1}. ${o.name}**\n`;
+    reply += `▫️ **آدرس:** ${o.address}\n`;
+    reply += `▫️ ${formatClickablePhone(o.phone)}\n`;
+    reply += `🗺 **لینک‌های مستقیم مسیریابی:**\n`;
+    reply += `• [🚗 مسیریابی با نشان](${neshanUrl})\n`;
+    reply += `• [🚙 مسیریابی با بلد](${baladUrl})\n`;
+    reply += `• [📍 مسیریابی با گوگل مپ](${gmapsUrl})\n`;
+    reply += `------------------------------------\n`;
+  });
+
+  reply += `\n💡 با لمس هر یک از لینک‌های بالا، نقشه در برنامه مسیریاب گوشی شما باز می‌شود.`;
+
+  return {
+    replyText: reply,
+    keyboard: [
+      ["تهران و شهرری", "خراسان رضوی (مشهد)"],
+      ["اصفهان", "فارس (شیراز)"],
+      ["قم", "البرز (کرج)"],
+      ["بازگشت به منوی اصلی"]
+    ],
+    sessionState: { step: "awaiting_gps_province" }
+  };
+}
+
 function getPlatformName(platform: string): string {
   switch (platform) {
     case "soroush": return "سروش پلاس (Soroush+)";
@@ -724,3 +1622,42 @@ function getPlatformName(platform: string): string {
     default: return "پیام‌رسان";
   }
 }
+
+async function handleJobPortalList(): Promise<BotResponse> {
+  let jobs = INITIAL_JOBS;
+  try {
+    const snap = await getDocs(query(collection(db, "job_postings"), orderBy("createdAt", "desc"), limit(10)));
+    if (!snap.empty) {
+      const dbJobs = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+      jobs = [...dbJobs, ...INITIAL_JOBS];
+    }
+  } catch {
+    // fallback to initial
+  }
+
+  const activeJobs = jobs.slice(0, 4);
+  let reply = `💼 **آخرین فرصت‌های شغلی مجاز با امکان جای خواب و پروانه کار:**\n\n`;
+
+  activeJobs.forEach((job, idx) => {
+    reply += `📌 **${idx + 1}. ${job.title}**\n`;
+    reply += `🏙 **محل کار:** ${job.city} (${job.province})\n`;
+    reply += `💰 **حقوق و مزایا:** ${job.salary}\n`;
+    reply += `🏠 **امکانات:** ${job.hasAccommodation ? "✅ دارای جای خواب کارگری" : "بدون جای خواب"} | ${job.hasFood ? "✅ وعده غذایی" : "بدون غذا"}\n`;
+    reply += `📜 **پروانه کار:** ${job.requiresWorkPermit ? "پروانه کار الزامی است" : "امکان دریافت پروانه کار"}\n`;
+    reply += `👤 **کارفرما:** ${job.employerName}\n`;
+    reply += `▫️ ${formatClickablePhone(job.contactPhone)}\n`;
+    reply += `────────────────────\n`;
+  });
+
+  reply += `\n💡 جهت ثبت آگهی استخدام یا ثبت رزومه کارجویی، گزینه‌های زیر را لمس فرمایید:`;
+
+  return {
+    replyText: reply,
+    keyboard: [
+      ["📢 ثبت آگهی استخدام (کارفرما)", "👤 ثبت مشخصات و رزومه (کارجو)"],
+      ["بازگشت به منوی اصلی"]
+    ],
+    sessionState: { step: "awaiting_job_portal_action" }
+  };
+}
+

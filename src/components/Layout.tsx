@@ -63,10 +63,15 @@ export default function Layout({ toggleTheme, theme, onLogout }: { toggleTheme: 
     <div dir="rtl" className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans transition-colors duration-200 flex">
       {/* Sidebar Desktop */}
       <aside className="hidden md:flex flex-col w-64 bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 h-screen sticky top-0">
-        <div className="p-5 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-black text-blue-600 dark:text-blue-400">دستیار مهاجر</h1>
-            <p className="text-xs text-gray-400 mt-0.5">پنل مدیریت دفاتر کفالت و ربات‌ها</p>
+        <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-black p-0.5 border border-slate-700 overflow-hidden flex items-center justify-center shrink-0">
+              <img src="/logo.png" alt="دستیار مهاجر" className="w-full h-full object-contain rounded-lg" />
+            </div>
+            <div>
+              <h1 className="text-base font-black text-blue-600 dark:text-blue-400">دستیار مهاجر</h1>
+              <p className="text-[10px] text-gray-400">پنل مدیریت دفاتر و ربات‌ها</p>
+            </div>
           </div>
         </div>
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
@@ -117,8 +122,13 @@ export default function Layout({ toggleTheme, theme, onLogout }: { toggleTheme: 
       <div className="flex-1 flex flex-col min-w-0">
         {/* Mobile Header */}
         <header className="md:hidden flex items-center justify-between p-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
-          <div className="flex items-center gap-2">
-            <h1 className="text-base font-black text-blue-600 dark:text-blue-400">دستیار مهاجر</h1>
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-black p-0.5 border border-slate-700 overflow-hidden flex items-center justify-center shrink-0">
+              <img src="/logo.png" alt="دستیار مهاجر" className="w-full h-full object-contain rounded-lg" />
+            </div>
+            <div>
+              <h1 className="text-base font-black text-blue-600 dark:text-blue-400">دستیار مهاجر</h1>
+            </div>
             <span className="text-[10px] bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded text-slate-500 font-bold">پنل ادمین</span>
           </div>
           <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="p-2">

@@ -499,7 +499,378 @@ async function startServer() {
     }
   }
 
-  // API Route to fetch bot data (can be used by the bot worker or external service)
+  // ==========================================
+  // SMS.IR INTEGRATION & NOTIFICATION ENDPOINTS
+  // ==========================================
+  // Helper to retrieve SMS.ir active configuration
+  async function getSmsIrConfig() {
+    let apiKey = process.env.SMS_IR_API_KEY || "";
+    let lineNumber = process.env.SMS_IR_LINE_NUMBER || "";
+    let defaultTemplateId = "";
+    let isEnabled = true;
+
+    try {
+      const docSnap = await getDb().collection("system_settings").doc("sms_ir").get();
+      if (docSnap.exists) {
+        const data = docSnap.data() || {};
+        if (data.apiKey) apiKey = data.apiKey;
+        if (data.lineNumber) lineNumber = data.lineNumber;
+        if (data.defaultTemplateId) defaultTemplateId = data.defaultTemplateId;
+        if (typeof data.isEnabled === "boolean") isEnabled = data.isEnabled;
+      }
+    } catch (e) {
+      console.warn("Could not read sms_ir config from Firestore, fallback to env:", e);
+    }
+
+    return { apiKey, lineNumber, defaultTemplateId, isEnabled };
+  }
+
+  // 1. Get SMS.ir Settings
+  app.get("/api/sms/config", async (req, res) => {
+    try {
+      const config = await getSmsIrConfig();
+      // Mask API key for security when returning to frontend
+      const maskedKey = config.apiKey
+        ? config.apiKey.length > 8
+          ? `${config.apiKey.slice(0, 4)}••••••••${config.apiKey.slice(-4)}`
+          : "••••••••"
+        : "";
+
+      res.json({
+        hasApiKey: !!config.apiKey,
+        maskedKey,
+        lineNumber: config.lineNumber,
+        defaultTemplateId: config.defaultTemplateId,
+        isEnabled: config.isEnabled,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to load SMS config" });
+    }
+  });
+
+  // 2. Save SMS.ir Settings
+  app.post("/api/sms/config", async (req, res) => {
+    try {
+      const { apiKey, lineNumber, defaultTemplateId, isEnabled } = req.body;
+      const updateData: Record<string, any> = {
+        updatedAt: FieldValue.serverTimestamp(),
+      };
+      if (apiKey !== undefined && apiKey !== "") updateData.apiKey = apiKey;
+      if (lineNumber !== undefined) updateData.lineNumber = lineNumber;
+      if (defaultTemplateId !== undefined) updateData.defaultTemplateId = defaultTemplateId;
+      if (isEnabled !== undefined) updateData.isEnabled = isEnabled;
+
+      await getDb().collection("system_settings").doc("sms_ir").set(updateData, { merge: true });
+      res.json({ success: true, message: "تنظیمات پنل پیامک sms.ir با موفقیت ذخیره شد." });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to save SMS config" });
+    }
+  });
+
+  // 3. Check SMS.ir Account Status & Credit
+  app.get("/api/sms/status", async (req, res) => {
+    try {
+      const config = await getSmsIrConfig();
+      if (!config.apiKey) {
+        return res.json({
+          connected: false,
+          credit: 0,
+          lines: [],
+          message: "کلید وب‌سرویس (API Key) سامانه sms.ir تنظیم نشده است.",
+        });
+      }
+
+      // Query SMS.ir credit endpoint
+      let credit = 0;
+      let lines: any[] = [];
+      let creditSuccess = false;
+
+      try {
+        const creditRes = await fetch("https://api.sms.ir/v1/credit", {
+          headers: {
+            "x-api-key": config.apiKey,
+            "Accept": "application/json",
+          },
+        });
+        const creditJson: any = await creditRes.json();
+        if (creditJson && (creditJson.status === 1 || creditJson.data !== undefined)) {
+          credit = Number(creditJson.data) || 0;
+          creditSuccess = true;
+        }
+      } catch (err) {
+        console.warn("Error checking sms.ir credit:", err);
+      }
+
+      // Query active sender lines
+      try {
+        const linesRes = await fetch("https://api.sms.ir/v1/line", {
+          headers: {
+            "x-api-key": config.apiKey,
+            "Accept": "application/json",
+          },
+        });
+        const linesJson: any = await linesRes.json();
+        if (linesJson && linesJson.data && Array.isArray(linesJson.data)) {
+          lines = linesJson.data;
+        }
+      } catch (err) {
+        console.warn("Error checking sms.ir lines:", err);
+      }
+
+      res.json({
+        connected: creditSuccess || lines.length > 0,
+        credit,
+        lines,
+        activeLine: config.lineNumber || (lines.length > 0 ? lines[0]?.lineNumber || lines[0] : ""),
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to fetch SMS status" });
+    }
+  });
+
+  // 4. Send Bulk / Single SMS via SMS.ir
+  app.post("/api/sms/send", async (req, res) => {
+    try {
+      const { mobiles, message, lineNumber } = req.body;
+      if (!mobiles || !Array.isArray(mobiles) || mobiles.length === 0) {
+        return res.status(400).json({ error: "لیست شماره‌های موبایل نامعتبر است." });
+      }
+      if (!message || typeof message !== "string" || !message.trim()) {
+        return res.status(400).json({ error: "متن پیامک نمی‌تواند خالی باشد." });
+      }
+
+      const config = await getSmsIrConfig();
+      if (!config.apiKey) {
+        return res.status(400).json({ error: "لطفاً ابتدا کلید API سامانه sms.ir را در تنظیمات وارد فرمایید." });
+      }
+
+      // Normalize mobile numbers to 11 digits format (e.g., 09123456789)
+      const cleanMobiles = mobiles.map(m => {
+        let clean = String(m).trim().replace(/[\s-+]/g, "");
+        if (clean.startsWith("98")) clean = "0" + clean.slice(2);
+        if (clean.startsWith("+98")) clean = "0" + clean.slice(3);
+        if (!clean.startsWith("0") && clean.length === 10) clean = "0" + clean;
+        return clean;
+      }).filter(m => /^09[0-9]{9}$/.test(m));
+
+      if (cleanMobiles.length === 0) {
+        return res.status(400).json({ error: "هیچ شماره موبایل معتبری با فرمت 09xx یافت نشد." });
+      }
+
+      const activeSenderLine = lineNumber || config.lineNumber;
+      if (!activeSenderLine) {
+        return res.status(400).json({ error: "شماره خط فرستنده در تنظیمات تعیین نشده است." });
+      }
+
+      // Send to sms.ir Bulk API
+      const smsPayload = {
+        lineNumber: Number(activeSenderLine) || activeSenderLine,
+        messageText: message.trim(),
+        mobiles: cleanMobiles,
+        sendDateTime: null,
+      };
+
+      const response = await fetch("https://api.sms.ir/v1/send/bulk", {
+        method: "POST",
+        headers: {
+          "x-api-key": config.apiKey,
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+        },
+        body: JSON.stringify(smsPayload),
+      });
+
+      const result: any = await response.json();
+      console.log("sms.ir bulk send response:", result);
+
+      const isSuccess = response.ok && (result.status === 1 || result.data);
+
+      // Log into Firestore
+      try {
+        await getDb().collection("sms_logs").add({
+          type: "bulk",
+          mobiles: cleanMobiles,
+          count: cleanMobiles.length,
+          message: message.trim(),
+          lineNumber: activeSenderLine,
+          resultStatus: result.status || null,
+          resultMessage: result.message || null,
+          success: isSuccess,
+          responseRaw: result,
+          createdAt: FieldValue.serverTimestamp(),
+        });
+      } catch (logErr) {
+        console.error("Failed to log SMS in firestore:", logErr);
+      }
+
+      if (!isSuccess) {
+        return res.status(400).json({
+          success: false,
+          error: result.message || "ارسال پیامک با خطا از سمت سرویس‌دهنده مواجه شد.",
+          raw: result,
+        });
+      }
+
+      res.json({
+        success: true,
+        message: `پیامک با موفقیت به ${cleanMobiles.length} شماره ارسال شد.`,
+        data: result.data,
+      });
+    } catch (err: any) {
+      console.error("SMS Send Error:", err);
+      res.status(500).json({ error: err.message || "خطا در اتصال به سرور sms.ir" });
+    }
+  });
+
+  // 5. Send Fast Template (Verify / OTP / Pattern) via SMS.ir
+  app.post("/api/sms/verify", async (req, res) => {
+    try {
+      const { mobile, templateId, parameters } = req.body;
+      if (!mobile) return res.status(400).json({ error: "شماره موبایل الزامی است." });
+
+      const config = await getSmsIrConfig();
+      if (!config.apiKey) {
+        return res.status(400).json({ error: "کلید API سامانه sms.ir تنظیم نشده است." });
+      }
+
+      const activeTemplateId = templateId || config.defaultTemplateId;
+      if (!activeTemplateId) {
+        return res.status(400).json({ error: "شناسه قالب (Template ID) مشخص نشده است." });
+      }
+
+      let cleanMobile = String(mobile).trim().replace(/[\s-+]/g, "");
+      if (cleanMobile.startsWith("98")) cleanMobile = "0" + cleanMobile.slice(2);
+      if (!cleanMobile.startsWith("0") && cleanMobile.length === 10) cleanMobile = "0" + cleanMobile;
+
+      const payload = {
+        mobile: cleanMobile,
+        templateId: Number(activeTemplateId),
+        parameters: Array.isArray(parameters) ? parameters : [],
+      };
+
+      const response = await fetch("https://api.sms.ir/v1/send/verify", {
+        method: "POST",
+        headers: {
+          "x-api-key": config.apiKey,
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const result: any = await response.json();
+      const isSuccess = response.ok && (result.status === 1 || result.data);
+
+      try {
+        await getDb().collection("sms_logs").add({
+          type: "verify",
+          mobile: cleanMobile,
+          templateId: activeTemplateId,
+          parameters: payload.parameters,
+          success: isSuccess,
+          responseRaw: result,
+          createdAt: FieldValue.serverTimestamp(),
+        });
+      } catch (logErr) {
+        console.error(logErr);
+      }
+
+      if (!isSuccess) {
+        return res.status(400).json({
+          success: false,
+          error: result.message || "خطا در ارسال پیامک سریع با قالب",
+          raw: result,
+        });
+      }
+
+      res.json({
+        success: true,
+        message: "پیامک اعتبارسنجی با موفقیت ارسال شد.",
+        data: result.data,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "خطا در ارسال پیامک وب‌سرویس" });
+    }
+  });
+
+  // 6. Get SMS Sent Logs
+  app.get("/api/sms/logs", async (req, res) => {
+    try {
+      const snap = await getDb()
+        .collection("sms_logs")
+        .orderBy("createdAt", "desc")
+        .limit(40)
+        .get();
+
+      const logs = snap.docs.map(d => ({
+        id: d.id,
+        ...d.data(),
+        createdAt: d.data().createdAt?.toDate ? d.data().createdAt.toDate() : new Date(),
+      }));
+
+      res.json(logs);
+    } catch (err: any) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to load SMS logs" });
+    }
+  });
+
+  // ==========================================
+  // AI LEGAL & IMMIGRATION ADVISOR (GEMINI)
+  // ==========================================
+  app.post("/api/ai/legal-advisor", async (req, res) => {
+    try {
+      const { question, history } = req.body;
+      if (!question || typeof question !== "string") {
+        return res.status(400).json({ error: "سوال نمی‌تواند خالی باشد." });
+      }
+
+      const gemini = getGeminiClient();
+      const systemInstruction = `شما مشاور رسمی، دلسوز و وکیل امور اقامتی و کنسولی سامانه «دستیار مهاجر» برای مهاجرین و اتباع محترم افغانستانی در ایران هستید.
+شما تسلط کامل بر موارد زیر دارید:
+۱. قوانین سازمان ملی مهاجرت ایران، سامانه سهما (سازمان ملی مهاجرت)، طرح‌های سپرده‌گذاری و کارت هوشمند ملی اتباع.
+۲. شرایط ثبت‌نام مدارس (کد هدایت تحصیلی، برگه حمایت تحصیلی، دانش‌آموزان دارای آمایش و سرشماری).
+۳. قوانین افتتاح حساب بانکی، خرید سیم‌کارت، صدور گواهینامه رانندگی، خرید ملک یا خودرو و مسافرت بین استانی با برگه تردد.
+۴. امور کنسولی و سفارت افغانستان (تثبیت هویت، صدور تذکره الکترونیک، تمدید گذرنامه، وکالت‌نامه‌ها، تایید مدارک و ازدواج).
+۵. روال کاری و مدارک مورد نیاز دفاتر کفالت و اشتغال اتباع خارجی در استان‌های مجاز و مناطق ممنوعه تردد.
+
+پاسخ‌ها را با احترام، دقت اداری، شماره‌گذاری گام‌به‌گام و راهنمایی‌های عملی به زبان فارسی روان و مناسب ارائه دهید. در انتهای پاسخ هم به مدارک لازم و دفاتر کفالت اشاره فرمایید.`;
+
+      const contents: any[] = [];
+      if (Array.isArray(history)) {
+        history.slice(-6).forEach(h => {
+          if (h.role && h.text) {
+            contents.push({
+              role: h.role === "assistant" || h.role === "model" ? "model" : "user",
+              parts: [{ text: h.text }]
+            });
+          }
+        });
+      }
+
+      contents.push({
+        role: "user",
+        parts: [{ text: question }]
+      });
+
+      const response = await gemini.models.generateContent({
+        model: "gemini-3.8-flash",
+        contents,
+        config: {
+          systemInstruction,
+          temperature: 0.4,
+          maxOutputTokens: 1500,
+        }
+      });
+
+      const reply = response.text || "پاسخی از مشاور هوشمند دریافت نشد. لطفاً سوال خود را با جزئیات بیشتر مطرح فرمایید.";
+      res.json({ success: true, answer: reply });
+    } catch (err: any) {
+      console.error("AI Advisor error:", err);
+      res.status(500).json({ error: err.message || "خطا در برقراری ارتباط با دستیار هوشمند." });
+    }
+  });
+
   app.get("/api/data/:collection", async (req, res) => {
     try {
       const { collection } = req.params;

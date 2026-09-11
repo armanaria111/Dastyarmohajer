@@ -255,8 +255,8 @@ export default function BotSimulator() {
               {/* Messenger Header Bar */}
               <div className={`${currentMessenger.headerBg} text-white px-4 py-3 flex items-center justify-between shadow-sm`}>
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center font-bold text-sm">
-                    <Bot size={20} />
+                  <div className="w-9 h-9 rounded-full bg-black p-0.5 border border-white/30 overflow-hidden flex items-center justify-center shrink-0">
+                    <img src="/logo.png" alt="دستیار مهاجر" className="w-full h-full object-contain rounded-full" />
                   </div>
                   <div>
                     <h4 className="font-bold text-sm leading-none">دستیار مهاجر ({currentMessenger.name.split(" ")[0]})</h4>
