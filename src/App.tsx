@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase";
+import { safeStorage } from "./utils/safeStorage";
 import Layout from "./components/Layout";
 import LandingPage from "./pages/LandingPage";
 import Login from "./pages/Login";
@@ -26,38 +27,61 @@ import StaffManagement from "./pages/StaffManagement";
 
 export default function App() {
   const [isAdmin, setIsAdmin] = useState<boolean>(() => {
-    return localStorage.getItem("admin_authenticated") === "true";
+    return safeStorage.getItem("admin_authenticated") === "true";
   });
-  const [loading, setLoading] = useState(true);
+  const [authChecking, setAuthChecking] = useState(false);
   const [theme, setTheme] = useState<"light" | "dark">("light");
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
-      if (u) {
-        setIsAdmin(true);
-        localStorage.setItem("admin_authenticated", "true");
+    let active = true;
+
+    // Fast fallback so auth check never hangs
+    const timer = setTimeout(() => {
+      if (active) setAuthChecking(false);
+    }, 1200);
+
+    try {
+      const unsub = onAuthStateChanged(
+        auth,
+        (u) => {
+          if (!active) return;
+          if (u) {
+            setIsAdmin(true);
+            safeStorage.setItem("admin_authenticated", "true");
+          }
+          setAuthChecking(false);
+          clearTimeout(timer);
+        },
+        () => {
+          if (active) setAuthChecking(false);
+        }
+      );
+
+      // Check saved theme
+      const savedTheme = safeStorage.getItem("theme");
+      if (savedTheme === "dark") {
+        setTheme("dark");
+        document.documentElement.classList.add("dark");
       }
-      setLoading(false);
-    });
 
-    // Check saved theme
-    const savedTheme = localStorage.getItem("theme");
-    if (savedTheme === "dark") {
-      setTheme("dark");
-      document.documentElement.classList.add("dark");
+      return () => {
+        active = false;
+        clearTimeout(timer);
+        unsub();
+      };
+    } catch {
+      setAuthChecking(false);
     }
-
-    return () => unsub();
   }, []);
 
   const handleLoginSuccess = () => {
     setIsAdmin(true);
-    localStorage.setItem("admin_authenticated", "true");
+    safeStorage.setItem("admin_authenticated", "true");
   };
 
   const handleLogout = async () => {
     setIsAdmin(false);
-    localStorage.removeItem("admin_authenticated");
+    safeStorage.removeItem("admin_authenticated");
     try {
       await auth.signOut();
     } catch {
@@ -68,7 +92,7 @@ export default function App() {
   const toggleTheme = () => {
     const newTheme = theme === "light" ? "dark" : "light";
     setTheme(newTheme);
-    localStorage.setItem("theme", newTheme);
+    safeStorage.setItem("theme", newTheme);
     if (newTheme === "dark") {
       document.documentElement.classList.add("dark");
     } else {
@@ -76,21 +100,10 @@ export default function App() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white font-sans">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-          <span className="text-xs text-slate-400">در حال راه‌اندازی سامانه دستیار مهاجر...</span>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <BrowserRouter>
       <Routes>
-        {/* 1. Public Landing Page for all visitors */}
+        {/* 1. Public Landing Page for all visitors (Always accessible immediately) */}
         <Route path="/" element={<LandingPage />} />
 
         {/* 2. Secret Admin Entry Paths (/Arman and /arman) */}
@@ -110,7 +123,14 @@ export default function App() {
         <Route
           path="/admin"
           element={
-            isAdmin ? (
+            authChecking ? (
+              <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white font-sans">
+                <div className="flex flex-col items-center gap-3">
+                  <div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                  <span className="text-xs text-slate-400">در حال بررسی دسترسی پنل مدیریت...</span>
+                </div>
+              </div>
+            ) : isAdmin ? (
               <Layout toggleTheme={toggleTheme} theme={theme} onLogout={handleLogout} />
             ) : (
               <Navigate to="/Arman" replace />
@@ -143,3 +163,4 @@ export default function App() {
     </BrowserRouter>
   );
 }
+

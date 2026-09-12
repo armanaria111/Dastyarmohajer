@@ -506,14 +506,14 @@ export default function LandingPage() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {config.botLinks.map((bot) => (
+            {(config?.botLinks || []).map((bot) => (
               <div
                 key={bot.id}
                 className="p-6 rounded-3xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-xl transition-all flex flex-col justify-between group"
               >
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <div className={`w-12 h-12 rounded-2xl bg-gradient-to-tr ${bot.color} text-white flex items-center justify-center shadow-md`}>
+                    <div className={`w-12 h-12 rounded-2xl bg-gradient-to-tr ${bot.color || "from-blue-500 to-indigo-600"} text-white flex items-center justify-center shadow-md`}>
                       <Bot size={24} />
                     </div>
                     <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
@@ -571,7 +571,7 @@ export default function LandingPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          {config.newsChannels.map((channel) => (
+          {(config?.newsChannels || []).map((channel) => (
             <div
               key={channel.id}
               className="p-6 rounded-3xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-lg transition-all flex flex-col justify-between"

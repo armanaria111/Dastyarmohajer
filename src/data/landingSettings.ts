@@ -128,6 +128,8 @@ export const DEFAULT_NEWS_CHANNELS: NewsChannelItem[] = [
   },
 ];
 
+import { safeStorage } from "../utils/safeStorage";
+
 // -------------------------------------------------------------
 // Admin Credentials Management
 // -------------------------------------------------------------
@@ -135,10 +137,7 @@ const STORAGE_KEY_ADMIN = "custom_admin_creds";
 const STORAGE_KEY_LANDING = "landing_page_config";
 
 export function getStoredAdminCredentials(): { username: string; password: string } {
-  if (typeof window === "undefined") {
-    return { username: "admin", password: "admin" };
-  }
-  const raw = localStorage.getItem(STORAGE_KEY_ADMIN);
+  const raw = safeStorage.getItem(STORAGE_KEY_ADMIN);
   if (!raw) {
     return { username: "admin", password: "admin" };
   }
@@ -154,16 +153,14 @@ export function getStoredAdminCredentials(): { username: string; password: strin
 }
 
 export function saveAdminCredentials(username: string, password: string): void {
-  if (typeof window !== "undefined") {
-    localStorage.setItem(
-      STORAGE_KEY_ADMIN,
-      JSON.stringify({
-        username: username.trim(),
-        password: password.trim(),
-        updatedAt: new Date().toISOString(),
-      })
-    );
-  }
+  safeStorage.setItem(
+    STORAGE_KEY_ADMIN,
+    JSON.stringify({
+      username: username.trim(),
+      password: password.trim(),
+      updatedAt: new Date().toISOString(),
+    })
+  );
 
   // Also sync to Firestore (async, non-blocking)
   try {
@@ -191,11 +188,7 @@ export function getLandingConfig(): LandingConfig {
     newsChannels: DEFAULT_NEWS_CHANNELS,
   };
 
-  if (typeof window === "undefined") {
-    return defaultConfig;
-  }
-
-  const raw = localStorage.getItem(STORAGE_KEY_LANDING);
+  const raw = safeStorage.getItem(STORAGE_KEY_LANDING);
   if (!raw) {
     return defaultConfig;
   }
@@ -205,8 +198,9 @@ export function getLandingConfig(): LandingConfig {
     return {
       ...defaultConfig,
       ...parsed,
-      botLinks: Array.isArray(parsed.botLinks) && parsed.botLinks.length > 0 ? parsed.botLinks : DEFAULT_BOT_LINKS,
-      newsChannels: Array.isArray(parsed.newsChannels) && parsed.newsChannels.length > 0 ? parsed.newsChannels : DEFAULT_NEWS_CHANNELS,
+      botLinks: Array.isArray(parsed?.botLinks) && parsed.botLinks.length > 0 ? parsed.botLinks : DEFAULT_BOT_LINKS,
+      newsChannels: Array.isArray(parsed?.newsChannels) && parsed.newsChannels.length > 0 ? parsed.newsChannels : DEFAULT_NEWS_CHANNELS,
+      announcementText: parsed?.announcementText || defaultConfig.announcementText,
     };
   } catch {
     return defaultConfig;
@@ -214,9 +208,7 @@ export function getLandingConfig(): LandingConfig {
 }
 
 export function saveLandingConfig(config: LandingConfig): void {
-  if (typeof window !== "undefined") {
-    localStorage.setItem(STORAGE_KEY_LANDING, JSON.stringify(config));
-  }
+  safeStorage.setItem(STORAGE_KEY_LANDING, JSON.stringify(config));
 
   // Also sync to Firestore
   try {
@@ -234,9 +226,16 @@ export async function syncLandingConfigFromCloud(): Promise<LandingConfig> {
     const ref = doc(db, "system_settings", "landing_page");
     const snap = await getDoc(ref);
     if (snap.exists()) {
-      const data = snap.data() as LandingConfig;
-      saveLandingConfig(data);
-      return data;
+      const data = snap.data();
+      const merged: LandingConfig = {
+        ...local,
+        ...data,
+        botLinks: Array.isArray(data?.botLinks) && data.botLinks.length > 0 ? data.botLinks : local.botLinks,
+        newsChannels: Array.isArray(data?.newsChannels) && data.newsChannels.length > 0 ? data.newsChannels : local.newsChannels,
+        announcementText: data?.announcementText || local.announcementText,
+      };
+      saveLandingConfig(merged);
+      return merged;
     }
   } catch {
     // Return local if network is unavailable
