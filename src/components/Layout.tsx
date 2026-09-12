@@ -17,7 +17,12 @@ import {
   Star,
   ShieldCheck,
   FileSpreadsheet,
-  ExternalLink
+  ExternalLink,
+  Briefcase,
+  Clock,
+  MessageSquare,
+  BarChart3,
+  UserCheck
 } from "lucide-react";
 import { auth } from "../firebase";
 import { signOut } from "firebase/auth";
@@ -37,7 +42,11 @@ export default function Layout({ toggleTheme, theme, onLogout }: { toggleTheme: 
   };
 
   const navItems = [
-    { name: "داشبورد و آمار", path: "/admin", icon: <LayoutDashboard size={20} /> },
+    { name: "داشبورد و آمار کل", path: "/admin", icon: <LayoutDashboard size={20} /> },
+    { name: "کاریابی و بانک کارجویان", path: "/admin/jobs", icon: <Briefcase size={20} /> },
+    { name: "یادآور انقضای مدارک", path: "/admin/reminders", icon: <Clock size={20} /> },
+    { name: "پشتیبانی ربات‌ها (Inbox)", path: "/admin/inbox", icon: <MessageSquare size={20} /> },
+    { name: "آنالیتیکس و آمار ربات‌ها", path: "/admin/analytics", icon: <BarChart3 size={20} /> },
     { name: "تنظیمات لندینگ و پیوندها", path: "/admin/landing-settings", icon: <Globe size={20} /> },
     { name: "دفاتر کفالت", path: "/admin/branches", icon: <Building2 size={20} /> },
     { name: "سفارت‌ها و کنسولگری", path: "/admin/embassies", icon: <Landmark size={20} /> },
@@ -50,6 +59,7 @@ export default function Layout({ toggleTheme, theme, onLogout }: { toggleTheme: 
     { name: "سوالات متداول (FAQ)", path: "/admin/faqs", icon: <HelpCircle size={20} /> },
     { name: "مدیریت و اتصال ربات‌ها", path: "/admin/bots", icon: <Bot size={20} /> },
     { name: "شبیه‌ساز پیام‌رسان‌ها", path: "/admin/simulator", icon: <Smartphone size={20} /> },
+    { name: "اپراتورها و دسترسی‌ها", path: "/admin/staff", icon: <UserCheck size={20} /> },
   ];
 
   const isNavActive = (path: string) => {

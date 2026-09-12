@@ -18,6 +18,11 @@ import Feedbacks from "./pages/Feedbacks";
 import LostDocuments from "./pages/LostDocuments";
 import PrintedTazkira from "./pages/PrintedTazkira";
 import LandingSettings from "./pages/LandingSettings";
+import JobPortalManagement from "./pages/JobPortalManagement";
+import ExpiryReminders from "./pages/ExpiryReminders";
+import BotInbox from "./pages/BotInbox";
+import BotAnalytics from "./pages/BotAnalytics";
+import StaffManagement from "./pages/StaffManagement";
 
 export default function App() {
   const [isAdmin, setIsAdmin] = useState<boolean>(() => {
@@ -113,6 +118,10 @@ export default function App() {
           }
         >
           <Route index element={<Dashboard />} />
+          <Route path="jobs" element={<JobPortalManagement />} />
+          <Route path="reminders" element={<ExpiryReminders />} />
+          <Route path="inbox" element={<BotInbox />} />
+          <Route path="analytics" element={<BotAnalytics />} />
           <Route path="landing-settings" element={<LandingSettings />} />
           <Route path="branches" element={<Branches />} />
           <Route path="embassies" element={<Embassies />} />
@@ -125,6 +134,7 @@ export default function App() {
           <Route path="broadcast" element={<Broadcast />} />
           <Route path="bots" element={<BotsManagement />} />
           <Route path="simulator" element={<BotSimulator />} />
+          <Route path="staff" element={<StaffManagement />} />
         </Route>
 
         {/* Fallback unknown routes to Landing */}

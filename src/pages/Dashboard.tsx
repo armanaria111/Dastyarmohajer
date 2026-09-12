@@ -18,7 +18,9 @@ import {
   ShieldAlert,
   Clock,
   Sparkles,
-  CheckCircle2
+  CheckCircle2,
+  Briefcase,
+  UserCheck
 } from "lucide-react";
 import {
   AreaChart,
@@ -217,18 +219,25 @@ export default function Dashboard() {
 
           <div className="flex flex-wrap items-center gap-3">
             <Link
-              to="/simulator"
-              className="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white px-5 py-3 rounded-2xl font-bold text-xs shadow-md transition-all hover:scale-[1.02]"
+              to="/admin/jobs"
+              className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2.5 rounded-2xl font-bold text-xs shadow-md transition-all"
             >
-              <Smartphone size={18} />
-              <span>تست زنده ربات (شبیه‌ساز)</span>
+              <Briefcase size={16} />
+              <span>مدیریت کاریابی و کارجویان</span>
             </Link>
             <Link
-              to="/broadcast"
-              className="inline-flex items-center gap-2 bg-white/15 hover:bg-white/25 text-white px-5 py-3 rounded-2xl font-bold text-xs border border-white/20 transition-all"
+              to="/admin/simulator"
+              className="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2.5 rounded-2xl font-bold text-xs shadow-md transition-all hover:scale-[1.02]"
             >
-              <Megaphone size={18} />
-              <span>انتشار خبر در کانال‌ها</span>
+              <Smartphone size={16} />
+              <span>شبیه‌ساز ربات</span>
+            </Link>
+            <Link
+              to="/admin/broadcast"
+              className="inline-flex items-center gap-2 bg-white/15 hover:bg-white/25 text-white px-4 py-2.5 rounded-2xl font-bold text-xs border border-white/20 transition-all"
+            >
+              <Megaphone size={16} />
+              <span>ارسال در کانال‌ها</span>
             </Link>
           </div>
         </div>
@@ -239,7 +248,7 @@ export default function Dashboard() {
         {/* Card 1: Total Bot Users */}
         <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm relative overflow-hidden group">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-gray-500 dark:text-gray-400">تعداد کاربران ربات‌ها</span>
+            <span className="text-xs font-bold text-gray-500 dark:text-gray-400">کاربران فعال پیام‌رسان‌ها</span>
             <div className="p-2.5 rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
               <Users size={20} />
             </div>
@@ -250,16 +259,16 @@ export default function Dashboard() {
             </span>
             <span className="text-[11px] text-gray-400">عضو فعال</span>
           </div>
-          <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold mt-2 flex items-center gap-1">
+          <Link to="/admin/analytics" className="text-[11px] text-blue-600 dark:text-blue-400 font-bold mt-2 flex items-center gap-1">
             <Activity size={12} />
-            <span>آمار واقعی ذخیره‌شده در دیتابیس</span>
-          </p>
+            <span>مشاهده تحلیل پلتفرم‌ها (ایتا، روبیکا...)</span>
+          </Link>
         </div>
 
         {/* Card 2: Total Visits / Interactions */}
         <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm relative overflow-hidden group">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-gray-500 dark:text-gray-400">مجموع تعاملات و بازدیدها</span>
+            <span className="text-xs font-bold text-gray-500 dark:text-gray-400">مجموع پیام‌ها و تعاملات</span>
             <div className="p-2.5 rounded-xl bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
               <Eye size={20} />
             </div>
@@ -270,15 +279,15 @@ export default function Dashboard() {
             </span>
             <span className="text-[11px] text-gray-400">درخواست و پیام</span>
           </div>
-          <p className="text-[11px] text-purple-600 dark:text-purple-400 font-bold mt-2 flex items-center gap-1">
-            <Activity size={12} />
-            <span>ثبت لحظه‌ای تعاملات ربات</span>
-          </p>
+          <Link to="/admin/inbox" className="text-[11px] text-purple-600 dark:text-purple-400 font-bold mt-2 flex items-center gap-1">
+            <MessageSquare size={12} />
+            <span>صندوق پاسخگویی مستقیم (Live Inbox)</span>
+          </Link>
         </div>
 
         {/* Card 3: Kefalat Offices */}
         <Link
-          to="/branches"
+          to="/admin/branches"
           className="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm hover:border-blue-200 dark:hover:border-blue-800 transition-all block"
         >
           <div className="flex items-center justify-between">
@@ -301,7 +310,7 @@ export default function Dashboard() {
 
         {/* Card 4: Requests / Appointments */}
         <Link
-          to="/requests"
+          to="/admin/requests"
           className="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm hover:border-blue-200 dark:hover:border-blue-800 transition-all block"
         >
           <div className="flex items-center justify-between">
@@ -326,18 +335,29 @@ export default function Dashboard() {
       {/* Secondary Fast Metric Badges */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Link
-          to="/feedbacks"
-          className="p-3 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl flex items-center justify-between hover:border-amber-300 transition-all"
+          to="/admin/jobs"
+          className="p-3 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl flex items-center justify-between hover:border-blue-300 transition-all"
         >
           <div className="flex items-center gap-2">
-            <Star size={16} className="text-amber-500 fill-amber-400" />
-            <span className="text-xs font-bold text-gray-700 dark:text-gray-300">نظرات دفاتر کفالت</span>
+            <Briefcase size={16} className="text-blue-600" />
+            <span className="text-xs font-bold text-gray-700 dark:text-gray-300">فرصت‌های کاریابی</span>
           </div>
-          <span className="font-black font-mono text-sm text-amber-600">{stats.feedbacks}</span>
+          <span className="font-black font-mono text-xs text-blue-600">ورود</span>
         </Link>
 
         <Link
-          to="/lost-documents"
+          to="/admin/reminders"
+          className="p-3 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl flex items-center justify-between hover:border-amber-300 transition-all"
+        >
+          <div className="flex items-center gap-2">
+            <Clock size={16} className="text-amber-500" />
+            <span className="text-xs font-bold text-gray-700 dark:text-gray-300">یادآور مدارک (رایگان)</span>
+          </div>
+          <span className="font-black font-mono text-xs text-amber-600">ورود</span>
+        </Link>
+
+        <Link
+          to="/admin/lost-documents"
           className="p-3 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl flex items-center justify-between hover:border-teal-300 transition-all"
         >
           <div className="flex items-center gap-2">
@@ -348,25 +368,14 @@ export default function Dashboard() {
         </Link>
 
         <Link
-          to="/embassies"
-          className="p-3 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl flex items-center justify-between hover:border-blue-300 transition-all"
+          to="/admin/feedbacks"
+          className="p-3 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl flex items-center justify-between hover:border-amber-300 transition-all"
         >
           <div className="flex items-center gap-2">
-            <Globe size={16} className="text-blue-600" />
-            <span className="text-xs font-bold text-gray-700 dark:text-gray-300">سفارت‌ها و کنسولگری</span>
+            <Star size={16} className="text-amber-500 fill-amber-400" />
+            <span className="text-xs font-bold text-gray-700 dark:text-gray-300">نظرات دفاتر</span>
           </div>
-          <span className="font-black font-mono text-sm text-blue-600">{stats.embassies}</span>
-        </Link>
-
-        <Link
-          to="/faqs"
-          className="p-3 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl flex items-center justify-between hover:border-purple-300 transition-all"
-        >
-          <div className="flex items-center gap-2">
-            <MessageSquare size={16} className="text-purple-600" />
-            <span className="text-xs font-bold text-gray-700 dark:text-gray-300">پرسش‌های ربات (FAQ)</span>
-          </div>
-          <span className="font-black font-mono text-sm text-purple-600">{stats.faqs}</span>
+          <span className="font-black font-mono text-sm text-amber-600">{stats.feedbacks}</span>
         </Link>
       </div>
 

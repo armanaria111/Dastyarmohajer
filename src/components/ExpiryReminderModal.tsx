@@ -248,16 +248,32 @@ export default function ExpiryReminderModal({ isOpen, onClose }: Props) {
 
               <div>
                 <label className="block font-bold text-gray-700 dark:text-gray-300 mb-1.5">
-                  شماره موبایل جهت دریافت پیامک رایگان:
+                  شماره موبایل یا شناسه پیام‌رسان:
                 </label>
                 <input
-                  type="tel"
+                  type="text"
                   required
-                  placeholder="۰۹۱۲۳۴۵۶۷۸۹"
+                  placeholder="۰۹۱۲۳۴۵۶۷۸۹ یا آیدی"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-white dark:bg-gray-800 border border-slate-200 dark:border-slate-700 font-mono text-xs text-gray-900 dark:text-white"
                 />
+              </div>
+            </div>
+
+            {/* Platform selection for free bot reminder */}
+            <div className="p-3 bg-emerald-50 dark:bg-emerald-950/30 rounded-xl border border-emerald-200 dark:border-emerald-800/50">
+              <label className="block font-black text-emerald-800 dark:text-emerald-300 text-xs mb-1.5 flex items-center gap-1.5">
+                <Bell size={13} />
+                <span>پیام‌رسان جهت دریافت رایگان هشدار انقضا (بدون هزینه پیامک):</span>
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-bold">
+                {["ایتا (Eitaa)", "روبیکا (Rubika)", "بله (Bale)", "تلگرام (Telegram)"].map((plt) => (
+                  <label key={plt} className="flex items-center gap-2 p-2 rounded-lg bg-white dark:bg-gray-800 border border-emerald-100 dark:border-emerald-900/40 cursor-pointer">
+                    <input type="radio" name="bot_plt" defaultChecked={plt.includes("ایتا")} className="text-emerald-600 focus:ring-emerald-500" />
+                    <span className="text-[11px] text-gray-700 dark:text-gray-200">{plt}</span>
+                  </label>
+                ))}
               </div>
             </div>
 
@@ -329,17 +345,12 @@ export default function ExpiryReminderModal({ isOpen, onClose }: Props) {
             </div>
 
             <div className="flex items-center justify-between pt-2">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={notifySms}
-                  onChange={(e) => setNotifySms(e.target.checked)}
-                  className="rounded text-amber-600 focus:ring-amber-500"
-                />
+              <div className="flex items-center gap-2">
+                <CheckCircle2 size={16} className="text-emerald-600" />
                 <span className="text-xs font-bold text-gray-700 dark:text-gray-300">
-                  ارسال پیامک یادآوری ۳۰ روز و ۱۰ روز قبل از اتمام اعتبار
+                  ارسال رایگان پیام هشدار در ربات (۳۰ روز و ۱۰ روز قبل از اتمام اعتبار)
                 </span>
-              </label>
+              </div>
 
               <button
                 type="submit"
@@ -347,7 +358,7 @@ export default function ExpiryReminderModal({ isOpen, onClose }: Props) {
                 className="px-6 py-2.5 bg-gradient-to-r from-amber-600 to-rose-600 hover:from-amber-700 hover:to-rose-700 text-white rounded-xl font-black text-xs shadow-md transition-all flex items-center gap-2 disabled:opacity-50"
               >
                 <Bell size={14} />
-                <span>{saving ? "در حال ثبت..." : "فعال‌سازی یادآور"}</span>
+                <span>{saving ? "در حال ثبت..." : "فعال‌سازی رایگان یادآور"}</span>
               </button>
             </div>
           </form>
