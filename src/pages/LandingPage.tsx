@@ -31,8 +31,16 @@ import {
   Camera,
   Car,
   Bell,
-  Briefcase
+  Briefcase,
+  FileSearch,
+  CreditCard,
+  Home,
+  BookOpen,
+  Smartphone,
+  Download
 } from "lucide-react";
+import { Link } from "react-router-dom";
+import { PWAInstallButton } from "../components/PWAInstallButton";
 import {
   getLandingConfig,
   syncLandingConfigFromCloud,
@@ -40,6 +48,7 @@ import {
   BotLinkItem,
   NewsChannelItem
 } from "../data/landingSettings";
+import { SocialIconDisplay } from "../components/SocialIconDisplay";
 import { collection, query, getDocs, limit } from "firebase/firestore";
 import { db } from "../firebase";
 import { isSupabaseConfigured, fetchTazkirasFromSupabase } from "../supabase";
@@ -227,36 +236,43 @@ export default function LandingPage() {
           </div>
 
           {/* Desktop Navigation Links */}
-          <nav className="hidden md:flex items-center gap-6 text-xs font-bold text-slate-600 dark:text-slate-300">
+          <nav className="hidden md:flex items-center gap-5 text-xs font-bold text-slate-600 dark:text-slate-300">
             <a href="#services" className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
               خدمات سامانه
             </a>
+            <Link to="/inquiries" className="text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 font-black">
+              <FileSearch size={14} />
+              <span>استعلامات هوشمند</span>
+            </Link>
+            <Link to="/education" className="text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 font-black">
+              <GraduationCap size={14} />
+              <span>مدارس و دانشگاه‌ها</span>
+            </Link>
             <a href="#search-tazkira" className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
-              استعلام آنلاین تذکره
+              استعلام تذکره
             </a>
             <a href="#bots" className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
-              ربات‌های پیام‌رسان
-            </a>
-            <a href="#news" className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
-              کانال‌های خبری
+              ربات‌ها
             </a>
             <a href="#faq" className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
               سوالات متداول
             </a>
           </nav>
 
-          {/* System Online Status Badge */}
+          {/* System Online Status Badge & PWA Install */}
           <div className="flex items-center gap-2">
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs font-bold">
+            <PWAInstallButton />
+            <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs font-bold">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span>ربات‌ها فعال و پاسخگو</span>
+              <span>ربات‌ها فعال</span>
             </div>
             <a
               href="#bots"
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-blue-600/20 flex items-center gap-1.5"
+              className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-blue-600/20 flex items-center gap-1.5"
             >
               <Bot size={15} />
-              <span>شروع گفتگو در ربات</span>
+              <span className="hidden sm:inline">شروع گفتگو در ربات</span>
+              <span className="sm:hidden">ربات‌ها</span>
             </a>
           </div>
         </div>
@@ -265,8 +281,10 @@ export default function LandingPage() {
       {/* ========================================================= */}
       {/* Hero Section */}
       {/* ========================================================= */}
-      <section className="relative overflow-hidden pt-12 pb-16 md:pt-16 md:pb-24 bg-gradient-to-b from-blue-50/50 via-white to-slate-50 dark:from-slate-900/50 dark:via-slate-900 dark:to-slate-950 border-b border-slate-200 dark:border-slate-800">
+      <section className="relative overflow-hidden pt-8 pb-16 md:pt-12 md:pb-24 bg-gradient-to-b from-blue-50/50 via-white to-slate-50 dark:from-slate-900/50 dark:via-slate-900 dark:to-slate-950 border-b border-slate-200 dark:border-slate-800">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 text-center">
+          {/* In-app Mobile Install Banner */}
+          <PWAInstallButton variant="banner" />
           {/* Official Logo Display */}
           <div className="flex justify-center mb-6">
             <div className="p-2 sm:p-3 bg-black rounded-3xl border border-slate-800 shadow-2xl shadow-teal-500/10 hover:border-slate-700 transition-all">
@@ -513,9 +531,15 @@ export default function LandingPage() {
               >
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <div className={`w-12 h-12 rounded-2xl bg-gradient-to-tr ${bot.color || "from-blue-500 to-indigo-600"} text-white flex items-center justify-center shadow-md`}>
-                      <Bot size={24} />
-                    </div>
+                    <SocialIconDisplay
+                      customIconUrl={bot.customIconUrl}
+                      iconType={bot.iconType}
+                      platform={bot.name}
+                      fallbackGradient={bot.color}
+                      className="w-12 h-12 rounded-2xl shadow-md"
+                      iconSize={24}
+                      alt={bot.persianName}
+                    />
                     <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
                       <span>فعال و آنلاین</span>
@@ -577,10 +601,22 @@ export default function LandingPage() {
               className="p-6 rounded-3xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-lg transition-all flex flex-col justify-between"
             >
               <div className="space-y-3.5">
-                <div className="flex items-center justify-between">
-                  <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                    {channel.badge}
-                  </span>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <SocialIconDisplay
+                      customIconUrl={channel.customIconUrl}
+                      iconType={channel.iconType || channel.platform}
+                      platform={channel.platform}
+                      className="w-11 h-11 rounded-2xl shadow-sm"
+                      iconSize={22}
+                      alt={channel.title}
+                    />
+                    <div>
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 inline-block">
+                        {channel.badge}
+                      </span>
+                    </div>
+                  </div>
                   <span className="text-xs font-bold text-slate-400">{channel.platform}</span>
                 </div>
 
@@ -884,8 +920,74 @@ export default function LandingPage() {
               </button>
             </div>
 
-            {/* 12. Education Guide */}
-            <div className="p-6 rounded-3xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs hover:shadow-lg transition-all flex flex-col justify-between space-y-4 md:col-span-2 lg:col-span-2">
+            {/* 12. Embassy Passport Lookup */}
+            <div className="p-6 rounded-3xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs hover:shadow-lg transition-all flex flex-col justify-between space-y-4">
+              <div className="space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950 text-blue-600 flex items-center justify-center">
+                  <Landmark size={24} />
+                </div>
+                <h4 className="text-base font-black text-slate-900 dark:text-white">
+                  استعلام پاسپورت سفارت تهران
+                </h4>
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                  رهگیری صدور گذرنامه با شماره فیش و تذکره، استعلام شماره کارتن و باجه تحویل مدارک در سفارت افغانستان در تهران.
+                </p>
+              </div>
+              <Link
+                to="/inquiries"
+                className="w-full py-2.5 px-4 bg-blue-50 hover:bg-blue-600 text-blue-700 hover:text-white dark:bg-slate-700 dark:hover:bg-blue-600 dark:text-slate-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+              >
+                <Search size={14} />
+                <span>پیگیری پاسپورت سفارت</span>
+              </Link>
+            </div>
+
+            {/* 13. Khodnevis Real Estate Lookup */}
+            <div className="p-6 rounded-3xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs hover:shadow-lg transition-all flex flex-col justify-between space-y-4">
+              <div className="space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950 text-emerald-600 flex items-center justify-center">
+                  <Home size={24} />
+                </div>
+                <h4 className="text-base font-black text-slate-900 dark:text-white">
+                  استعلام سامانه خودنویس املاک
+                </h4>
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                  استعلام کد رهگیری قرارداد اجاره مسکونی وزارت راه و شهرسازی جهت تاییدیه احراز سکونت در دفاتر کفالت اتباع.
+                </p>
+              </div>
+              <Link
+                to="/inquiries"
+                className="w-full py-2.5 px-4 bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white dark:bg-slate-700 dark:hover:bg-emerald-600 dark:text-slate-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+              >
+                <Search size={14} />
+                <span>استعلام قرارداد خودنویس</span>
+              </Link>
+            </div>
+
+            {/* 14. FIDA Code Lookup */}
+            <div className="p-6 rounded-3xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs hover:shadow-lg transition-all flex flex-col justify-between space-y-4">
+              <div className="space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-purple-50 dark:bg-purple-950 text-purple-600 flex items-center justify-center">
+                  <CreditCard size={24} />
+                </div>
+                <h4 className="text-base font-black text-slate-900 dark:text-white">
+                  استعلام کد فراگیر فیدا (FIDA)
+                </h4>
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                  راستی‌آزمایی شناسه ۱۲ رقمی فیدا جهت رفع مسدودی حساب بانکی، کارت شتاب، ثبت شرکت و اسناد رسمی.
+                </p>
+              </div>
+              <Link
+                to="/inquiries"
+                className="w-full py-2.5 px-4 bg-purple-50 hover:bg-purple-600 text-purple-700 hover:text-white dark:bg-slate-700 dark:hover:bg-purple-600 dark:text-slate-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+              >
+                <Search size={14} />
+                <span>استعلام شناسه فیدا</span>
+              </Link>
+            </div>
+
+            {/* 15. Education, Scholarships & School Admissions */}
+            <div className="p-6 rounded-3xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs hover:shadow-lg transition-all flex flex-col justify-between space-y-4 md:col-span-2 lg:col-span-3">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-start gap-4">
                   <div className="w-12 h-12 rounded-2xl bg-rose-50 dark:bg-rose-950 text-rose-600 flex items-center justify-center shrink-0">
@@ -893,21 +995,64 @@ export default function LandingPage() {
                   </div>
                   <div>
                     <h4 className="text-base font-black text-slate-900 dark:text-white">
-                      راهنمای جامع ثبت‌نام مدارس و تحصیل اتباع (برگه حمایت تحصیلی و دانشگاه)
+                      سامانه جامع آموزش، سنجش سلامت مدارس و دانشگاه‌های اتباع
                     </h4>
                     <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed mt-1">
-                      مراحل دریافت برگه حمایت تحصیلی برای دانش‌آموزان سرشماری‌شده، نوبت‌گیری سنجش سلامت پایه اول (سامانه my.medu.ir) و قوانین شهریه.
+                      کد سازمان سنجش کنکور، سامانه سجاد (Saorg)، ثبت‌نام مای مدیو (my.medu.ir)، نوبت‌دهی پایگاه سنجش سلامت نوآموزان (سیرت) و بورسیه‌های فعال دانشگاه‌های ایران.
                     </p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setIsEducationGuideOpen(true)}
-                  className="px-6 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-md shadow-rose-600/20 shrink-0"
-                >
-                  <GraduationCap size={15} />
-                  <span>مشاهده راهنمای ثبت‌نام مدارس</span>
-                </button>
+                <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => setIsEducationGuideOpen(true)}
+                    className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+                  >
+                    <BookOpen size={14} />
+                    <span>راهنمای سریع</span>
+                  </button>
+                  <Link
+                    to="/education"
+                    className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-md shadow-rose-600/20"
+                  >
+                    <GraduationCap size={15} />
+                    <span>پورتال تخصصی دانشگاه و مدارس</span>
+                  </Link>
+                </div>
+              </div>
+
+              {/* Service Card 10: Official Mobile App (APK / TWA / PWA) */}
+              <div className="p-6 rounded-2xl bg-gradient-to-r from-blue-900/40 via-indigo-950/40 to-slate-900/60 border-2 border-blue-500/30 shadow-md flex flex-col md:flex-row items-center justify-between gap-5 transition-all hover:border-blue-500/60">
+                <div className="flex items-center gap-4 text-right">
+                  <div className="w-14 h-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-lg shadow-blue-600/30">
+                    <Smartphone size={28} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                        نسخه رسمی تلفن همراه
+                      </span>
+                      <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                        بدون فیلتر و بدون نیاز به استور
+                      </span>
+                    </div>
+                    <h4 className="text-base font-black text-slate-900 dark:text-white mt-1">
+                      اپلیکیشن موبایل دستیار مهاجر (نسخه مستقیم APK و TWA)
+                    </h4>
+                    <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed mt-1">
+                      نصب مستقیم روی گوشی اندروید و iOS، آیکون مستقل روی صفحه گوشی، حجم کمتر از ۳ مگابایت، دسترسی آفلاین و اعلان‌های هوشمند.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                  <Link
+                    to="/download-app"
+                    className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 shadow-md shadow-blue-600/30"
+                  >
+                    <Download size={15} />
+                    <span>دانلود و راهنمای نصب APK</span>
+                  </Link>
+                </div>
               </div>
             </div>
           </div>

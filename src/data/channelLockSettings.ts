@@ -7,6 +7,7 @@ export interface ChannelLockConfig {
   channelUsername: string;
   channelUrl: string;
   lockMessage?: string;
+  customIconUrl?: string; // Uploaded custom channel logo/icon
 }
 
 export const DEFAULT_CHANNEL_LOCKS: Record<string, ChannelLockConfig> = {

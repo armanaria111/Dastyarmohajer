@@ -22,7 +22,9 @@ import {
   Clock,
   MessageSquare,
   BarChart3,
-  UserCheck
+  UserCheck,
+  GraduationCap,
+  FileSearch
 } from "lucide-react";
 import { auth } from "../firebase";
 import { signOut } from "firebase/auth";
@@ -43,6 +45,8 @@ export default function Layout({ toggleTheme, theme, onLogout }: { toggleTheme: 
 
   const navItems = [
     { name: "داشبورد و آمار کل", path: "/admin", icon: <LayoutDashboard size={20} /> },
+    { name: "استعلامات (پاسپورت، خودنویس، فیدا)", path: "/admin/inquiries", icon: <FileSearch size={20} /> },
+    { name: "آموزش، مدارس و دانشگاه‌ها", path: "/admin/education", icon: <GraduationCap size={20} /> },
     { name: "کاریابی و بانک کارجویان", path: "/admin/jobs", icon: <Briefcase size={20} /> },
     { name: "یادآور انقضای مدارک", path: "/admin/reminders", icon: <Clock size={20} /> },
     { name: "پشتیبانی ربات‌ها (Inbox)", path: "/admin/inbox", icon: <MessageSquare size={20} /> },
@@ -59,6 +63,7 @@ export default function Layout({ toggleTheme, theme, onLogout }: { toggleTheme: 
     { name: "سوالات متداول (FAQ)", path: "/admin/faqs", icon: <HelpCircle size={20} /> },
     { name: "مدیریت و اتصال ربات‌ها", path: "/admin/bots", icon: <Bot size={20} /> },
     { name: "شبیه‌ساز پیام‌رسان‌ها", path: "/admin/simulator", icon: <Smartphone size={20} /> },
+    { name: "اپلیکیشن موبایل (APK / TWA)", path: "/admin/mobile-app", icon: <Smartphone size={20} /> },
     { name: "اپراتورها و دسترسی‌ها", path: "/admin/staff", icon: <UserCheck size={20} /> },
   ];
 

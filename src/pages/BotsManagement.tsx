@@ -23,6 +23,8 @@ import {
   saveChannelLockConfigs,
   ChannelLockConfig
 } from "../data/channelLockSettings";
+import { SocialIconUploader } from "../components/SocialIconUploader";
+import { SocialIconDisplay } from "../components/SocialIconDisplay";
 
 interface BotPlatform {
   id: string;

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Clock,
   AlertTriangle,
@@ -8,14 +8,20 @@ import {
   Search,
   CheckCircle2,
   Trash2,
+  Edit2,
   Bot,
   ShieldAlert,
   Calendar,
   Phone,
   Sparkles,
   RefreshCw,
-  Info
+  Info,
+  Plus,
+  X,
+  Save
 } from "lucide-react";
+import { collection, onSnapshot, setDoc, doc, deleteDoc, updateDoc } from "firebase/firestore";
+import { db } from "../firebase";
 import { exportToCSV } from "../utils/exportUtils";
 
 interface MonitoredDocument {
@@ -105,13 +111,57 @@ export default function ExpiryReminders() {
   const [batchSending, setBatchSending] = useState(false);
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
 
+  // New Document Modal
+  const [isNewModalOpen, setIsNewModalOpen] = useState(false);
+  const [newDocItem, setNewDocItem] = useState<Partial<MonitoredDocument>>({
+    ownerName: "",
+    docType: "کارت آمایش (مرحله ۱۸)",
+    docNumber: "",
+    phone: "",
+    botPlatform: "eitaa",
+    botChatId: "",
+    expiryDate: "۱۴۰۴/۰۸/۰۱",
+    daysRemaining: 30,
+    status: "active"
+  });
+
+  // Edit Document Modal
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingDocItem, setEditingDocItem] = useState<MonitoredDocument | null>(null);
+
+  // Sync with Firestore
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "monitored_documents"), (snap) => {
+      if (!snap.empty) {
+        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as MonitoredDocument));
+        setDocs(list);
+      } else {
+        INITIAL_DOCS.forEach((item) => {
+          setDoc(doc(db, "monitored_documents", item.id), item).catch(() => {});
+        });
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  const getPlatformName = (platform: MonitoredDocument["botPlatform"]) => {
+    switch (platform) {
+      case "eitaa": return "ایتا";
+      case "bale": return "بله";
+      case "rubika": return "روبیکا";
+      case "telegram": return "تلگرام";
+      case "soroush": return "سروش‌پلاس";
+      default: return platform;
+    }
+  };
+
   // Filter documents
   const filteredDocs = docs.filter((d) => {
     const matchesSearch =
-      d.ownerName.includes(searchTerm) ||
-      d.docNumber.includes(searchTerm) ||
-      d.phone.includes(searchTerm) ||
-      d.docType.includes(searchTerm);
+      (d.ownerName || "").includes(searchTerm) ||
+      (d.docNumber || "").includes(searchTerm) ||
+      (d.phone || "").includes(searchTerm) ||
+      (d.docType || "").includes(searchTerm);
 
     const matchesPlatform = platformFilter === "all" || d.botPlatform === platformFilter;
 
@@ -123,98 +173,154 @@ export default function ExpiryReminders() {
     return matchesSearch && matchesPlatform && matchesUrgency;
   });
 
-  // Send FREE bot notification to single user
-  const handleSendBotNotification = (docItem: MonitoredDocument) => {
+  // Send bot notification
+  const handleSendBotNotification = async (docItem: MonitoredDocument) => {
     setSendingId(docItem.id);
-    setTimeout(() => {
+    const lastNotifiedAt = `امروز در پیام‌رسان ${getPlatformName(docItem.botPlatform)}`;
+    setTimeout(async () => {
       setDocs((prev) =>
         prev.map((item) =>
           item.id === docItem.id
-            ? {
-                ...item,
-                status: "notified",
-                lastNotifiedAt: `امروز در پیام‌رسان ${getPlatformName(item.botPlatform)}`
-              }
+            ? { ...item, status: "notified", lastNotifiedAt }
             : item
         )
       );
+      try {
+        await updateDoc(doc(db, "monitored_documents", docItem.id), {
+          status: "notified",
+          lastNotifiedAt
+        });
+      } catch {
+        // fallback
+      }
       setSendingId(null);
-      setAlertMessage(`پیام یادآوری با موفقیت و کاملاً رایگان در ربات ${getPlatformName(docItem.botPlatform)} به ${docItem.ownerName} ارسال شد.`);
+      setAlertMessage(`هشدار تمدید با موفقیت به شناسه ${docItem.botChatId} در پیام‌رسان ${getPlatformName(docItem.botPlatform)} مخابره شد.`);
       setTimeout(() => setAlertMessage(null), 4000);
-    }, 800);
+    }, 700);
   };
 
-  // Batch send to all critical documents (< 30 days) via BOT (Free!)
-  const handleBatchSendCritical = () => {
-    const criticalList = docs.filter((d) => d.daysRemaining <= 30);
-    if (criticalList.length === 0) {
-      alert("هیچ مدرکی در آستانه انقضا (زیر ۳۰ روز) جهت ارسال پیام وجود ندارد.");
-      return;
-    }
-
-    if (
-      !confirm(
-        `آیا مایلید برای ${criticalList.length} نفر از کاربرانی که کمتر از ۳۰ روز تا اتمام مدرکشان مانده، پیام هشدار رایگان در ربات ارسال فرمایید؟\n(توجه: این ارسال از طریق وب‌هوک ربات‌ها انجام شده و هیچ هزینه‌ای برای پیامک ندارد)`
-      )
-    ) {
+  // Batch send
+  const handleBatchSend = () => {
+    const urgentItems = docs.filter((d) => d.daysRemaining <= 30 && d.status !== "notified");
+    if (urgentItems.length === 0) {
+      alert("هیچ مدرک اضطراری بدون هشداری برای ارسال گروهی وجود ندارد.");
       return;
     }
 
     setBatchSending(true);
-    setTimeout(() => {
+    setTimeout(async () => {
       setDocs((prev) =>
         prev.map((item) =>
           item.daysRemaining <= 30
-            ? {
-                ...item,
-                status: "notified",
-                lastNotifiedAt: `امروز به صورت گروهی در ربات ${getPlatformName(item.botPlatform)}`
-              }
+            ? { ...item, status: "notified", lastNotifiedAt: "امروز (ارسال هوشمند گروهی)" }
             : item
         )
       );
+      for (const item of urgentItems) {
+        try {
+          await updateDoc(doc(db, "monitored_documents", item.id), {
+            status: "notified",
+            lastNotifiedAt: "امروز (ارسال هوشمند گروهی)"
+          });
+        } catch {
+          // continue
+        }
+      }
       setBatchSending(false);
-      setAlertMessage(`هشدار گروهی برای ${criticalList.length} نفر در بستر ربات‌های پیام‌رسان ارسال شد (هزینه پیامک: صفر ریال).`);
+      setAlertMessage(`عملیات ارسال گروهی پایان یافت: برای ${urgentItems.length} متقاضی هشدار تمدید رایگان در ربات‌ها ارسال شد.`);
       setTimeout(() => setAlertMessage(null), 5000);
-    }, 1500);
+    }, 1200);
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm("آیا از حذف این پرونده یادآور اطمینان دارید؟")) {
-      setDocs(docs.filter((d) => d.id !== id));
+  // Delete
+  const handleDelete = async (id: string) => {
+    if (confirm("آیا از حذف این پرونده پایش مدرک اطمینان دارید؟")) {
+      setDocs((prev) => prev.filter((d) => d.id !== id));
+      try {
+        await deleteDoc(doc(db, "monitored_documents", id));
+      } catch {
+        // fallback
+      }
     }
   };
 
-  const getPlatformName = (platform: string) => {
-    switch (platform) {
-      case "eitaa":
-        return "ایتا";
-      case "bale":
-        return "بله";
-      case "rubika":
-        return "روبیکا";
-      case "telegram":
-        return "تلگرام";
-      case "soroush":
-        return "سروش+";
-      default:
-        return platform;
+  // Add Document
+  const handleCreateDocument = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newDocItem.ownerName || !newDocItem.docNumber || !newDocItem.phone) {
+      alert("لطفاً نام صاحب مدرک، شماره مدرک و شماره تلفن را وارد فرمایید.");
+      return;
+    }
+    const id = `EXP-${Date.now().toString().slice(-4)}`;
+    const created: MonitoredDocument = {
+      id,
+      ownerName: newDocItem.ownerName || "",
+      docType: newDocItem.docType || "کارت آمایش",
+      docNumber: newDocItem.docNumber || "",
+      phone: newDocItem.phone || "",
+      botPlatform: (newDocItem.botPlatform as any) || "eitaa",
+      botChatId: newDocItem.botChatId || newDocItem.phone || "",
+      expiryDate: newDocItem.expiryDate || "۱۴۰۴/۰۸/۰۱",
+      status: "active",
+      daysRemaining: Number(newDocItem.daysRemaining) || 30
+    };
+
+    setDocs([created, ...docs]);
+    setIsNewModalOpen(false);
+    setNewDocItem({
+      ownerName: "",
+      docType: "کارت آمایش (مرحله ۱۸)",
+      docNumber: "",
+      phone: "",
+      botPlatform: "eitaa",
+      botChatId: "",
+      expiryDate: "۱۴۰۴/۰۸/۰۱",
+      daysRemaining: 30,
+      status: "active"
+    });
+
+    try {
+      await setDoc(doc(db, "monitored_documents", id), created);
+    } catch {
+      // fallback
     }
   };
 
+  // Edit Document
+  const handleOpenEdit = (item: MonitoredDocument) => {
+    setEditingDocItem({ ...item });
+    setIsEditModalOpen(true);
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingDocItem) return;
+
+    setDocs((prev) => prev.map((d) => (d.id === editingDocItem.id ? editingDocItem : d)));
+    setIsEditModalOpen(false);
+
+    try {
+      await updateDoc(doc(db, "monitored_documents", editingDocItem.id), { ...editingDocItem });
+    } catch {
+      // fallback
+    }
+    setEditingDocItem(null);
+  };
+
+  // Export
   const handleExportCSV = () => {
     const headers = [
-      "کد پرونده",
-      "نام و نام خانوادگی",
+      "کد پایش",
+      "نام صاحب مدرک",
       "نوع مدرک",
       "شماره مدرک",
       "شماره تماس",
-      "پیام‌رسان ربات",
-      "شناسه ربات",
+      "پیام‌رسان متصل",
+      "شناسه چت در ربات",
       "تاریخ انقضا",
-      "روزهای باقیمانده",
+      "روزهای باقی‌مانده",
       "وضعیت اطلاع‌رسانی",
-      "آخرین ارسال"
+      "آخرین نوتیفیکیشن"
     ];
     const rows = filteredDocs.map((d) => [
       d.id,
@@ -225,24 +331,40 @@ export default function ExpiryReminders() {
       getPlatformName(d.botPlatform),
       d.botChatId,
       d.expiryDate,
-      d.daysRemaining > 0 ? `${d.daysRemaining} روز` : "منقضی شده",
-      d.status === "notified" ? "پیام ارسال شد" : "در انتظار ارسال",
-      d.lastNotifiedAt || "تاکنون ارسال نشده"
+      d.daysRemaining,
+      d.status === "notified" ? "هشدار ارسال شد" : "در انتظار",
+      d.lastNotifiedAt || "-"
     ]);
-    exportToCSV("لیست_مدارک_در_آستانه_انقضا_اتباع", headers, rows);
+    exportToCSV("پایش_تاریخ_انقضا_مدارک_اقامتی", headers, rows);
   };
+
+  const criticalCount = docs.filter((d) => d.daysRemaining > 0 && d.daysRemaining <= 30).length;
+  const expiredCount = docs.filter((d) => d.daysRemaining <= 0).length;
 
   return (
     <div className="p-4 sm:p-6 space-y-6 max-w-7xl mx-auto">
-      {/* Top Header */}
+      {/* Alert toast */}
+      {alertMessage && (
+        <div className="p-4 bg-emerald-500 text-white rounded-2xl shadow-lg flex items-center justify-between text-xs font-bold animate-in fade-in duration-200">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 size={18} />
+            <span>{alertMessage}</span>
+          </div>
+          <button onClick={() => setAlertMessage(null)} className="opacity-70 hover:opacity-100">
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
+      {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white dark:bg-gray-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs">
         <div>
           <h2 className="text-xl font-black text-gray-900 dark:text-white flex items-center gap-2.5">
-            <Clock className="text-amber-500" size={24} />
-            <span>میز کار یادآورهای انقضای مدارک (ارسال رایگان در ربات)</span>
+            <Clock className="text-blue-600 dark:text-blue-400" size={24} />
+            <span>پایش انقضای مدارک اقامتی و هشدار خودکار در پیام‌رسان‌ها</span>
           </h2>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            پایش سررسید کارت آمایش، گذرنامه و پروانه کار با امکان ارسال مستقیم پیام هشدار به پی‌وی ربات کاربران بدون هزینه پیامک
+            ارسال رایگان پیامک یا نوتیفیکیشن رباتی برای کارت‌های آمایش، تمدید گذرنامه و پروانه کار قبل از اتمام اعتبار
           </p>
         </div>
 
@@ -252,71 +374,60 @@ export default function ExpiryReminders() {
             className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-xs font-bold text-gray-700 dark:text-gray-200 flex items-center justify-center gap-2 transition-colors"
           >
             <Download size={16} />
-            <span>خروجی اکسل (CSV)</span>
+            <span>خروجی اکسل</span>
           </button>
 
           <button
-            onClick={handleBatchSendCritical}
-            disabled={batchSending}
-            className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-rose-600 hover:from-amber-700 hover:to-rose-700 text-white text-xs font-black flex items-center justify-center gap-2 shadow-md transition-all disabled:opacity-50"
+            onClick={() => setIsNewModalOpen(true)}
+            className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black flex items-center justify-center gap-2 shadow-md transition-all"
           >
-            {batchSending ? <RefreshCw className="animate-spin" size={16} /> : <Bot size={16} />}
-            <span>ارسال پیام گروهی در ربات (زیر ۳۰ روز)</span>
+            <Plus size={16} />
+            <span>ثبت مدرک و یادآور جدید</span>
+          </button>
+
+          <button
+            onClick={handleBatchSend}
+            disabled={batchSending || criticalCount === 0}
+            className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-black flex items-center justify-center gap-2 shadow-md transition-all disabled:opacity-50"
+          >
+            {batchSending ? <RefreshCw className="animate-spin" size={16} /> : <Sparkles size={16} />}
+            <span>ارسال گروهی هشدارهای فوری ({criticalCount})</span>
           </button>
         </div>
       </div>
 
-      {/* Free Notice Banner */}
-      <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 p-4 rounded-2xl flex items-start gap-3">
-        <Info className="text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" size={18} />
-        <div className="text-xs text-emerald-900 dark:text-emerald-200 space-y-1">
-          <p className="font-bold">
-            صرفه‌جویی ۱۰۰٪ در هزینه‌ها: ارسال از طریق پیام‌رسان‌های داخلی و تلگرام
-          </p>
-          <p className="text-emerald-800 dark:text-emerald-300/80 leading-relaxed text-[11px]">
-            با توجه به اینکه مراجعین هزینه‌ای برای خدمات پرداخت نمی‌کنند، تمام هشدارهای انقضا به صورت رایگان از طریق ربات‌های ایتا، بله، روبیکا یا تلگرام به پی‌وی کاربر ارسال می‌شوند و هیچ شارژ یا تعرفه پیامکی مصرف نخواهد شد.
-          </p>
-        </div>
-      </div>
-
-      {/* Alert toast */}
-      {alertMessage && (
-        <div className="p-3 bg-blue-600 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg animate-in fade-in">
-          <CheckCircle2 size={16} />
-          <span>{alertMessage}</span>
-        </div>
-      )}
-
-      {/* Stats Cards */}
+      {/* Metrics Row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="p-4 bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs">
-          <div className="text-gray-400 text-xs font-bold">کل مدارک پایش شده</div>
-          <div className="text-2xl font-black text-gray-900 dark:text-white mt-1">{docs.length}</div>
+          <div className="text-xs text-gray-400 font-bold">کل مدارک تحت پایش</div>
+          <div className="text-xl font-black text-gray-900 dark:text-white mt-1">{docs.length} پرونده</div>
         </div>
-
-        <div className="p-4 bg-white dark:bg-gray-800 rounded-2xl border border-rose-200 dark:border-rose-900/40 shadow-xs">
-          <div className="text-rose-600 dark:text-rose-400 text-xs font-bold">منقضی شده</div>
-          <div className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-1">
-            {docs.filter((d) => d.daysRemaining <= 0).length}
+        <div className="p-4 bg-white dark:bg-gray-800 rounded-2xl border border-rose-200 dark:border-rose-900/40 bg-rose-50/20 shadow-xs">
+          <div className="text-xs text-rose-500 font-bold flex items-center gap-1">
+            <ShieldAlert size={14} />
+            <span>منقضی شده (نیازمند اقدام فوری)</span>
           </div>
+          <div className="text-xl font-black text-rose-600 mt-1">{expiredCount} مدرک</div>
         </div>
-
-        <div className="p-4 bg-white dark:bg-gray-800 rounded-2xl border border-amber-200 dark:border-amber-900/40 shadow-xs">
-          <div className="text-amber-600 dark:text-amber-400 text-xs font-bold">بحرانی (زیر ۳۰ روز)</div>
-          <div className="text-2xl font-black text-amber-600 dark:text-amber-400 mt-1">
-            {docs.filter((d) => d.daysRemaining > 0 && d.daysRemaining <= 30).length}
+        <div className="p-4 bg-white dark:bg-gray-800 rounded-2xl border border-amber-200 dark:border-amber-900/40 bg-amber-50/20 shadow-xs">
+          <div className="text-xs text-amber-600 font-bold flex items-center gap-1">
+            <AlertTriangle size={14} />
+            <span>کمتر از ۳۰ روز مانده</span>
           </div>
+          <div className="text-xl font-black text-amber-600 mt-1">{criticalCount} پرونده</div>
         </div>
-
-        <div className="p-4 bg-white dark:bg-gray-800 rounded-2xl border border-emerald-200 dark:border-emerald-900/40 shadow-xs">
-          <div className="text-emerald-600 dark:text-emerald-400 text-xs font-bold">هشدار ارسال شده در ربات</div>
-          <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
-            {docs.filter((d) => d.status === "notified").length}
+        <div className="p-4 bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs">
+          <div className="text-xs text-emerald-600 font-bold flex items-center gap-1">
+            <CheckCircle2 size={14} />
+            <span>هشدارهای ارسال‌شده</span>
+          </div>
+          <div className="text-xl font-black text-emerald-600 mt-1">
+            {docs.filter((d) => d.status === "notified").length} نفر
           </div>
         </div>
       </div>
 
-      {/* Filter Bar */}
+      {/* Filter and Search Bar */}
       <div className="bg-white dark:bg-gray-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 grid grid-cols-1 sm:grid-cols-3 gap-3 shadow-xs">
         <div className="relative">
           <Search className="absolute right-3 top-2.5 text-gray-400" size={16} />
@@ -324,7 +435,7 @@ export default function ExpiryReminders() {
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="جستجو بر اساس نام، شماره مدرک یا موبایل..."
+            placeholder="جستجو بر اساس نام، شماره مدرک یا شماره تماس..."
             className="w-full pr-9 pl-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
@@ -335,10 +446,10 @@ export default function ExpiryReminders() {
             onChange={(e) => setUrgencyFilter(e.target.value as any)}
             className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="all">تمام وضعیت‌های مهلت</option>
-            <option value="expired">فقط منقضی شده‌ها</option>
-            <option value="critical">بحرانی (زیر ۳۰ روز)</option>
+            <option value="all">وضعیت انقضا: همه موارد</option>
+            <option value="critical">بحرانی (کمتر از ۳۰ روز)</option>
             <option value="warning">هشدار (۳۰ تا ۶۰ روز)</option>
+            <option value="expired">منقضی شده</option>
           </select>
         </div>
 
@@ -348,29 +459,29 @@ export default function ExpiryReminders() {
             onChange={(e) => setPlatformFilter(e.target.value)}
             className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="all">همه پیام‌رسان‌ها</option>
+            <option value="all">پیام‌رسان: همه پلتفرم‌ها</option>
             <option value="eitaa">ایتا</option>
             <option value="bale">بله</option>
             <option value="rubika">روبیکا</option>
             <option value="telegram">تلگرام</option>
-            <option value="soroush">سروش+</option>
+            <option value="soroush">سروش‌پلاس</option>
           </select>
         </div>
       </div>
 
-      {/* Documents Table */}
+      {/* Main Table */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
           <table className="w-full text-right text-xs">
             <thead className="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-700 text-gray-500 dark:text-gray-400 font-black">
               <tr>
-                <th className="p-3.5">مشخصات صاحب مدرک</th>
+                <th className="p-3.5">صاحب مدرک و تماس</th>
                 <th className="p-3.5">نوع و شماره مدرک</th>
-                <th className="p-3.5">ربات دریافت‌کننده</th>
-                <th className="p-3.5">تاریخ انقضا و مهلت</th>
-                <th className="p-3.5">وضعیت ارسال هشدار</th>
-                <th className="p-3.5 text-center">ارسال رایگان در ربات</th>
-                <th className="p-3.5 text-center">حذف</th>
+                <th className="p-3.5">پیام‌رسان اطلاع‌رسانی</th>
+                <th className="p-3.5">تاریخ انقضا و باقیمانده</th>
+                <th className="p-3.5">وضعیت اخطار</th>
+                <th className="p-3.5 text-center">ارسال در ربات</th>
+                <th className="p-3.5 text-center">عملیات (ویرایش / حذف)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-gray-700 dark:text-gray-200 font-medium">
@@ -453,13 +564,22 @@ export default function ExpiryReminders() {
                         </button>
                       </td>
                       <td className="p-3.5 text-center whitespace-nowrap">
-                        <button
-                          onClick={() => handleDelete(docItem.id)}
-                          className="p-1.5 text-gray-400 hover:text-rose-600 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                          title="حذف رکورد"
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={() => handleOpenEdit(docItem)}
+                            className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
+                            title="ویرایش اطلاعات مدرک"
+                          >
+                            <Edit2 size={16} />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(docItem.id)}
+                            className="p-1.5 text-gray-400 hover:text-rose-600 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                            title="حذف رکورد"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -469,6 +589,317 @@ export default function ExpiryReminders() {
           </table>
         </div>
       </div>
+
+      {/* Add Document Modal */}
+      {isNewModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-md overflow-hidden border border-slate-200 dark:border-slate-700 shadow-2xl animate-in fade-in duration-200">
+            <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+              <h3 className="font-black text-sm text-gray-900 dark:text-white flex items-center gap-2">
+                <Plus size={16} className="text-blue-500" />
+                <span>ثبت مدرک و یادآور انقضای جدید</span>
+              </h3>
+              <button onClick={() => setIsNewModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateDocument} className="p-5 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                  نام و نام خانوادگی صاحب مدرک *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newDocItem.ownerName}
+                  onChange={(e) => setNewDocItem({ ...newDocItem, ownerName: e.target.value })}
+                  placeholder="مثال: غلام‌رسول احمدی"
+                  className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">نوع مدرک</label>
+                  <select
+                    value={newDocItem.docType}
+                    onChange={(e) => setNewDocItem({ ...newDocItem, docType: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="کارت آمایش (مرحله ۱۸)">کارت آمایش (مرحله ۱۸)</option>
+                    <option value="گذرنامه الکترونیک / ویزا">گذرنامه الکترونیک / ویزا</option>
+                    <option value="پروانه کار و اشتغال">پروانه کار و اشتغال</option>
+                    <option value="برگه حمایت تحصیلی و سرشماری">برگه حمایت تحصیلی و سرشماری</option>
+                    <option value="برگه سرشماری معتبر">برگه سرشماری معتبر</option>
+                    <option value="دفترچه اقامت">دفترچه اقامت</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                    شماره مدرک / پرونده *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newDocItem.docNumber}
+                    onChange={(e) => setNewDocItem({ ...newDocItem, docNumber: e.target.value })}
+                    placeholder="AM-12345678"
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                    شماره تماس همراه *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newDocItem.phone}
+                    onChange={(e) => setNewDocItem({ ...newDocItem, phone: e.target.value })}
+                    placeholder="09123456789"
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">پیام‌رسان متصل</label>
+                  <select
+                    value={newDocItem.botPlatform}
+                    onChange={(e) => setNewDocItem({ ...newDocItem, botPlatform: e.target.value as any })}
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="eitaa">ایتا</option>
+                    <option value="bale">بله</option>
+                    <option value="rubika">روبیکا</option>
+                    <option value="telegram">تلگرام</option>
+                    <option value="soroush">سروش‌پلاس</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                    شناسه ربات / آیدی چت
+                  </label>
+                  <input
+                    type="text"
+                    value={newDocItem.botChatId}
+                    onChange={(e) => setNewDocItem({ ...newDocItem, botChatId: e.target.value })}
+                    placeholder="@user یا شماره"
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">تاریخ انقضا</label>
+                  <input
+                    type="text"
+                    value={newDocItem.expiryDate}
+                    onChange={(e) => setNewDocItem({ ...newDocItem, expiryDate: e.target.value })}
+                    placeholder="۱۴۰۴/۰۸/۰۱"
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                  روزهای باقیمانده تا انقضا
+                </label>
+                <input
+                  type="number"
+                  value={newDocItem.daysRemaining}
+                  onChange={(e) => setNewDocItem({ ...newDocItem, daysRemaining: Number(e.target.value) })}
+                  className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2 border-t border-slate-200 dark:border-slate-700">
+                <button
+                  type="button"
+                  onClick={() => setIsNewModalOpen(false)}
+                  className="px-4 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 text-gray-600 dark:text-gray-400 hover:bg-slate-100"
+                >
+                  انصراف
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-xs font-black rounded-xl bg-blue-600 text-white hover:bg-blue-700 shadow-md"
+                >
+                  ثبت پرونده پایش
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Document Modal */}
+      {isEditModalOpen && editingDocItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-md overflow-hidden border border-slate-200 dark:border-slate-700 shadow-2xl animate-in fade-in duration-200">
+            <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+              <h3 className="font-black text-sm text-gray-900 dark:text-white flex items-center gap-2">
+                <Edit2 size={16} className="text-blue-500" />
+                <span>ویرایش پرونده پایش مدرک ({editingDocItem.id})</span>
+              </h3>
+              <button onClick={() => setIsEditModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="p-5 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                  نام و نام خانوادگی صاحب مدرک *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editingDocItem.ownerName}
+                  onChange={(e) => setEditingDocItem({ ...editingDocItem, ownerName: e.target.value })}
+                  className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">نوع مدرک</label>
+                  <select
+                    value={editingDocItem.docType}
+                    onChange={(e) => setEditingDocItem({ ...editingDocItem, docType: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="کارت آمایش (مرحله ۱۸)">کارت آمایش (مرحله ۱۸)</option>
+                    <option value="گذرنامه الکترونیک / ویزا">گذرنامه الکترونیک / ویزا</option>
+                    <option value="پروانه کار و اشتغال">پروانه کار و اشتغال</option>
+                    <option value="برگه حمایت تحصیلی و سرشماری">برگه حمایت تحصیلی و سرشماری</option>
+                    <option value="برگه سرشماری معتبر">برگه سرشماری معتبر</option>
+                    <option value="دفترچه اقامت">دفترچه اقامت</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                    شماره مدرک / پرونده *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editingDocItem.docNumber}
+                    onChange={(e) => setEditingDocItem({ ...editingDocItem, docNumber: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                    شماره تماس همراه *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editingDocItem.phone}
+                    onChange={(e) => setEditingDocItem({ ...editingDocItem, phone: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">پیام‌رسان متصل</label>
+                  <select
+                    value={editingDocItem.botPlatform}
+                    onChange={(e) => setEditingDocItem({ ...editingDocItem, botPlatform: e.target.value as any })}
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="eitaa">ایتا</option>
+                    <option value="bale">بله</option>
+                    <option value="rubika">روبیکا</option>
+                    <option value="telegram">تلگرام</option>
+                    <option value="soroush">سروش‌پلاس</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                    شناسه ربات / آیدی چت
+                  </label>
+                  <input
+                    type="text"
+                    value={editingDocItem.botChatId}
+                    onChange={(e) => setEditingDocItem({ ...editingDocItem, botChatId: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">تاریخ انقضا</label>
+                  <input
+                    type="text"
+                    value={editingDocItem.expiryDate}
+                    onChange={(e) => setEditingDocItem({ ...editingDocItem, expiryDate: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                    روزهای باقیمانده تا انقضا
+                  </label>
+                  <input
+                    type="number"
+                    value={editingDocItem.daysRemaining}
+                    onChange={(e) => setEditingDocItem({ ...editingDocItem, daysRemaining: Number(e.target.value) })}
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">وضعیت اخطار</label>
+                  <select
+                    value={editingDocItem.status}
+                    onChange={(e) => setEditingDocItem({ ...editingDocItem, status: e.target.value as any })}
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="active">در صف ارسال (فعال)</option>
+                    <option value="notified">هشدار ارسال شد</option>
+                    <option value="renewed">تمدید شده</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2 border-t border-slate-200 dark:border-slate-700">
+                <button
+                  type="button"
+                  onClick={() => setIsEditModalOpen(false)}
+                  className="px-4 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 text-gray-600 dark:text-gray-400 hover:bg-slate-100"
+                >
+                  انصراف
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-xs font-black rounded-xl bg-blue-600 text-white hover:bg-blue-700 shadow-md flex items-center gap-1.5"
+                >
+                  <Save size={14} />
+                  <span>ذخیره تغییرات</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

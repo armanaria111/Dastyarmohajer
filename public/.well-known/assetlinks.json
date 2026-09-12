@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.mohajer.assistant",
+      "sha256_cert_fingerprints": [
+        "14:6D:E9:7D:0F:52:AB:FC:A7:EC:48:7B:64:CA:0E:CF:06:5D:2D:BE:0C:08:7A:B4:73:27:0D:37:A6:61:94:E9"
+      ]
+    }
+  }
+]

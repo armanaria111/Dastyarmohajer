@@ -11,7 +11,11 @@ service cloud.firestore {
       return id is string && id.size() > 0 && id.size() <= 128;
     }
 
-    // Public directories & reference data (read by anyone/bots, manage by authenticated admin or fallback)
+    function isValidText(text, maxLen) {
+      return text is string && text.size() <= maxLen;
+    }
+
+    // Public directories & reference data (read by anyone/bots, managed by admins)
     match /branches/{branchId} {
       allow read: if true;
       allow write: if true;
@@ -32,7 +36,7 @@ service cloud.firestore {
       allow write: if true;
     }
 
-    // Broadcasts and channel configurations
+    // News broadcasts and messenger channels
     match /broadcasts/{broadcastId} {
       allow read: if true;
       allow write: if true;
@@ -48,7 +52,36 @@ service cloud.firestore {
       allow write: if true;
     }
 
-    // Bot configurations & analytics
+    // Job portal & job seekers
+    match /jobs/{jobId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /job_seekers/{seekerId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Document expiry monitoring & reminders
+    match /monitored_documents/{docId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Staff and operator management
+    match /staff_members/{staffId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Messenger bot support inbox & tickets
+    match /support_messages/{msgId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Bot configurations & live analytics
     match /bot_configs/{configId} {
       allow read, write: if true;
     }
@@ -88,10 +121,36 @@ service cloud.firestore {
       allow write: if true;
     }
 
-    // Catch-all
-    match /{document=**} {
-      allow read, write: if true;
+    // Education, Scholarships & School Admissions
+    match /education_bulletins/{bulletinId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /student_consultations/{consultId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Smart Inquiries: Embassy Passports, Khodnevis, FIDA & Inquiry Logs
+    match /embassy_passports/{passportId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /khodnevis_contracts/{contractId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /fida_records/{fidaId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /inquiry_logs/{logId} {
+      allow read: if true;
+      allow write: if true;
     }
   }
 }
-

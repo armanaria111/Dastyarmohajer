@@ -24,6 +24,10 @@ import ExpiryReminders from "./pages/ExpiryReminders";
 import BotInbox from "./pages/BotInbox";
 import BotAnalytics from "./pages/BotAnalytics";
 import StaffManagement from "./pages/StaffManagement";
+import EducationPortal from "./pages/EducationPortal";
+import SmartInquiries from "./pages/SmartInquiries";
+import MobileAppDownload from "./pages/MobileAppDownload";
+import { OfflineIndicator } from "./components/OfflineIndicator";
 
 export default function App() {
   const [isAdmin, setIsAdmin] = useState<boolean>(() => {
@@ -102,9 +106,14 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <OfflineIndicator />
       <Routes>
         {/* 1. Public Landing Page for all visitors (Always accessible immediately) */}
         <Route path="/" element={<LandingPage />} />
+        <Route path="/inquiries" element={<SmartInquiries />} />
+        <Route path="/education" element={<EducationPortal />} />
+        <Route path="/download-app" element={<MobileAppDownload />} />
+        <Route path="/mobile-app" element={<MobileAppDownload />} />
 
         {/* 2. Secret Admin Entry Paths (/Arman and /arman) */}
         <Route
@@ -139,6 +148,8 @@ export default function App() {
         >
           <Route index element={<Dashboard />} />
           <Route path="jobs" element={<JobPortalManagement />} />
+          <Route path="inquiries" element={<SmartInquiries />} />
+          <Route path="education" element={<EducationPortal />} />
           <Route path="reminders" element={<ExpiryReminders />} />
           <Route path="inbox" element={<BotInbox />} />
           <Route path="analytics" element={<BotAnalytics />} />
@@ -154,6 +165,7 @@ export default function App() {
           <Route path="broadcast" element={<Broadcast />} />
           <Route path="bots" element={<BotsManagement />} />
           <Route path="simulator" element={<BotSimulator />} />
+          <Route path="mobile-app" element={<MobileAppDownload />} />
           <Route path="staff" element={<StaffManagement />} />
         </Route>
 

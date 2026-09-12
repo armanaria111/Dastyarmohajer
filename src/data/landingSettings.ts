@@ -6,7 +6,8 @@ export interface BotLinkItem {
   id: string;
   name: string;
   persianName: string;
-  iconType: "telegram" | "bale" | "eitaa" | "rubika" | "whatsapp" | "soroush" | "gap";
+  iconType: string;
+  customIconUrl?: string; // Uploaded icon (base64 data URL) or custom image URL
   url: string;
   username: string;
   description: string;
@@ -22,6 +23,8 @@ export interface NewsChannelItem {
   handle: string;
   description: string;
   badge: string;
+  iconType?: string;
+  customIconUrl?: string; // Uploaded icon (base64 data URL) or custom image URL
 }
 
 export interface LandingConfig {

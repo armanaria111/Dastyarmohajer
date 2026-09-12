@@ -889,6 +889,18 @@ async function startServer() {
     }
   });
 
+  // Digital Asset Links for Android TWA verification
+  app.get("/.well-known/assetlinks.json", (req, res) => {
+    res.setHeader("Content-Type", "application/json");
+    res.sendFile(path.join(process.cwd(), "public", ".well-known", "assetlinks.json"));
+  });
+
+  // Manifest endpoint fallback
+  app.get("/manifest.json", (req, res) => {
+    res.setHeader("Content-Type", "application/manifest+json");
+    res.sendFile(path.join(process.cwd(), "public", "manifest.json"));
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

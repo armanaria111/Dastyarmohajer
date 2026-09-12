@@ -27,6 +27,7 @@ import {
   getStoredAdminCredentials,
   saveAdminCredentials
 } from "../data/landingSettings";
+import { SocialIconUploader } from "../components/SocialIconUploader";
 
 export default function LandingSettings() {
   const [activeTab, setActiveTab] = useState<"bots" | "news" | "security">("bots");
@@ -59,6 +60,30 @@ export default function LandingSettings() {
     const updated = [...config.botLinks];
     updated[index] = { ...updated[index], ...updates };
     setConfig({ ...config, botLinks: updated });
+  };
+
+  // Add new bot link
+  const addBotLink = () => {
+    const newBot: BotLinkItem = {
+      id: "bot_" + Date.now(),
+      name: "ربات جدید",
+      persianName: "ربات جدید",
+      iconType: "telegram",
+      username: "@new_bot",
+      url: "https://t.me/",
+      description: "خدمات استعلام و نوبت‌دهی",
+      color: "from-blue-600 to-indigo-600",
+      isActive: true,
+    };
+    setConfig({ ...config, botLinks: [...config.botLinks, newBot] });
+  };
+
+  // Remove bot link
+  const removeBotLink = (index: number) => {
+    if (confirm("آیا از حذف این ربات از صفحه لندینگ اطمینان دارید؟")) {
+      const updated = config.botLinks.filter((_, i) => i !== index);
+      setConfig({ ...config, botLinks: updated });
+    }
   };
 
   // Update a specific news channel
@@ -191,8 +216,16 @@ export default function LandingSettings() {
       {/* ========================================================= */}
       {activeTab === "bots" && (
         <div className="space-y-4">
-          <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 text-xs text-blue-800 dark:text-blue-200">
-            لینک‌های زیر مستقیماً بر روی کارت‌های لندینگ پیج اصلی نمایش داده می‌شوند. هر کاربری روی دکمه ورود کلیک کند، به این آدرس‌ها هدایت خواهد شد.
+          <div className="flex items-center justify-between p-4 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 text-xs text-blue-800 dark:text-blue-200">
+            <span>لینک‌های زیر مستقیماً بر روی کارت‌های لندینگ پیج اصلی نمایش داده می‌شوند. هر کاربری روی دکمه ورود کلیک کند، به این آدرس‌ها هدایت خواهد شد.</span>
+            <button
+              type="button"
+              onClick={addBotLink}
+              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1 shrink-0 mr-3"
+            >
+              <Plus size={14} />
+              <span>افزودن ربات جدید</span>
+            </button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -202,10 +235,20 @@ export default function LandingSettings() {
                 className="p-5 rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-xs space-y-3"
               >
                 <div className="flex items-center justify-between">
-                  <span className="font-black text-sm text-gray-900 dark:text-white flex items-center gap-2">
-                    <Bot size={18} className="text-blue-600" />
-                    <span>{bot.persianName}</span>
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-black text-sm text-gray-900 dark:text-white flex items-center gap-2">
+                      <Bot size={18} className="text-blue-600" />
+                      <span>{bot.persianName}</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removeBotLink(index)}
+                      className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition-colors"
+                      title="حذف ربات"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
                   <label className="flex items-center gap-1.5 text-xs text-gray-500 font-bold cursor-pointer">
                     <input
                       type="checkbox"
@@ -251,6 +294,16 @@ export default function LandingSettings() {
                       className="w-full px-3 py-2 rounded-xl bg-gray-50 dark:bg-gray-700/60 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-xs focus:outline-none focus:border-blue-500"
                     />
                   </div>
+
+                  {/* Custom Social Icon Upload */}
+                  <SocialIconUploader
+                    label="لوگو یا آیکون اختصاصی ربات"
+                    customIconUrl={bot.customIconUrl}
+                    iconType={bot.iconType}
+                    platform={bot.name}
+                    onCustomIconChange={(url) => updateBot(index, { customIconUrl: url })}
+                    onIconTypeChange={(type) => updateBot(index, { iconType: type })}
+                  />
                 </div>
               </div>
             ))}
@@ -366,6 +419,16 @@ export default function LandingSettings() {
                       className="w-full px-3 py-2 rounded-xl bg-gray-50 dark:bg-gray-700/60 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-xs"
                     />
                   </div>
+
+                  {/* Custom Social Icon Upload */}
+                  <SocialIconUploader
+                    label="لوگو یا آیکون اختصاصی کانال"
+                    customIconUrl={channel.customIconUrl}
+                    iconType={channel.iconType || channel.platform}
+                    platform={channel.platform}
+                    onCustomIconChange={(url) => updateNews(index, { customIconUrl: url })}
+                    onIconTypeChange={(type) => updateNews(index, { iconType: type })}
+                  />
                 </div>
               </div>
             ))}

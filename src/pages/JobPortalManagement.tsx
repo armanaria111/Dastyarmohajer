@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Briefcase,
   Users,
@@ -17,11 +17,15 @@ import {
   Filter,
   Check,
   Building2,
-  GraduationCap
+  GraduationCap,
+  Save,
+  RotateCcw
 } from "lucide-react";
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc } from "firebase/firestore";
+import { db } from "../firebase";
 import { exportToCSV } from "../utils/exportUtils";
 
-interface JobOpening {
+export interface JobOpening {
   id: string;
   title: string;
   employer: string;
@@ -36,7 +40,7 @@ interface JobOpening {
   createdAt: string;
 }
 
-interface JobSeeker {
+export interface JobSeeker {
   id: string;
   name: string;
   phone: string;
@@ -99,54 +103,81 @@ const INITIAL_JOBS: JobOpening[] = [
     employer: "رستوران بام مشهد",
     phone: "09151239876",
     province: "خراسان رضوی",
-    city: "مشهد - بلوار وکیل‌آباد",
+    city: "مشهد - طرقبه",
     category: "رستوران و کافه",
-    salary: "۱۶ تا ۱۸ میلیون + بیمه",
-    hasAccommodation: false,
+    salary: "۱۵ تا ۱۸ میلیون + وعده غذایی",
+    hasAccommodation: true,
+    status: "approved",
+    description: "جهت سالن‌داری و آماده‌سازی غذا، ۲ نفر نیروی آراسته و باسابقه استخدام می‌شوند.",
+    createdAt: "۱۴۰۴/۰۶/۱۸"
+  },
+  {
+    id: "JOB-105",
+    title: "جوشکار CO2 و مونتاژکار اسکلت فلزی",
+    employer: "کارگاه سوله سازی پارس",
+    phone: "09127778899",
+    province: "تهران",
+    city: "پاکدشت - شهرک صنعتی عباس‌آباد",
+    category: "صنعتی و کارگاهی",
+    salary: "۲۲ تا ۳۰ میلیون تومان",
+    hasAccommodation: true,
     status: "filled",
-    description: "نیروی آراسته و منظم جهت سالن‌داری و ظرفشویی در شیفت عصر و شب.",
-    createdAt: "۱۴۰۴/۰۶/۱۲"
+    description: "ظرفیت این موقعیت شغلی تکمیل گردید.",
+    createdAt: "۱۴۰۴/۰۶/۱۰"
   }
 ];
 
 const INITIAL_SEEKERS: JobSeeker[] = [
   {
-    id: "SEEKER-201",
-    name: "احمد نوری",
-    phone: "09391118877",
+    id: "SEEK-501",
+    name: "نجیب‌الله انوری",
+    phone: "09301112233",
     province: "تهران",
-    profession: "خیاط و راسته دوز",
+    profession: "چرخکار و اتوکار پوشاک",
     experienceYears: 6,
     education: "دیپلم",
     status: "active",
     needsAccommodation: true,
-    notes: "دارای کارت آمایش مرحله ۱۸ معتبر. مسلط به چرخ‌های صنعتی و الگو.",
+    notes: "تسلط کامل بر چرخ‌های صنعتی راسته و زیگزال، سابقه کار در کارگاه‌های پوشاک تهرانپارس و جمهوری.",
     createdAt: "۱۴۰۴/۰۶/۱۴"
   },
   {
-    id: "SEEKER-202",
-    name: "عبدالرحیم محمدی",
-    phone: "09187766554",
-    province: "قم",
-    profession: "گچ‌کار و سفیدکار ساختمان",
-    experienceYears: 10,
-    education: "ابتدایی",
+    id: "SEEK-502",
+    name: "سید بشیر حسینی",
+    phone: "09194445566",
+    province: "البرز",
+    profession: "سیم‌کش ساختمان و برق‌کار صنعتی",
+    experienceYears: 8,
+    education: "فوق دیپلم فنی",
     status: "interviewing",
-    needsAccommodation: true,
-    notes: "سرپرست یک اکیپ ۳ نفره گچ‌کاری و ابزار زنی ماهر.",
+    needsAccommodation: false,
+    notes: "دارای گواهی مهارت فنی و حرفه‌ای، مجری لوله‌کشی و سیم‌کشی بیش از ۱۰ پروژه ساختمانی.",
     createdAt: "۱۴۰۴/۰۶/۱۵"
   },
   {
-    id: "SEEKER-203",
-    name: "محمدامین صادقی",
-    phone: "09904433221",
-    province: "یزد",
-    profession: "کارگر کوره‌پزخانه و کاشی‌کاری",
-    experienceYears: 4,
+    id: "SEEK-503",
+    name: "محمدعیسی فدایی",
+    phone: "09153332211",
+    province: "خراسان رضوی",
+    profession: "گچ‌کار و سفیدکار ماهر",
+    experienceYears: 10,
     education: "سیکل",
+    status: "active",
+    needsAccommodation: true,
+    notes: "استادکار گچ‌کاری، ابزارزنی و نورمخفی، همراه با دو کارگر وردست آماده کار پروژه‌ای.",
+    createdAt: "۱۴۰۴/۰۶/۱۶"
+  },
+  {
+    id: "SEEK-504",
+    name: "احمد شفیق کریمی",
+    phone: "09367778899",
+    province: "اصفهان",
+    profession: "تراشکار و قالب‌ساز فلزی",
+    experienceYears: 4,
+    education: "دیپلم فنی",
     status: "hired",
     needsAccommodation: false,
-    notes: "مشغول به کار در کارخانه کاشی با تاییدیه دفتر کفالت.",
+    notes: "مشغول به کار در شهرک صنعتی مورچه‌خورت اصفهان شد.",
     createdAt: "۱۴۰۴/۰۶/۱۰"
   }
 ];
@@ -160,7 +191,7 @@ export default function JobPortalManagement() {
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [accommodationFilter, setAccommodationFilter] = useState("all");
 
-  // Modal for new job
+  // New Job Modal
   const [isNewJobModalOpen, setIsNewJobModalOpen] = useState(false);
   const [newJob, setNewJob] = useState<Partial<JobOpening>>({
     title: "",
@@ -175,13 +206,67 @@ export default function JobPortalManagement() {
     description: ""
   });
 
+  // Edit Job Modal
+  const [isEditJobModalOpen, setIsEditJobModalOpen] = useState(false);
+  const [editingJob, setEditingJob] = useState<JobOpening | null>(null);
+
+  // New Seeker Modal
+  const [isNewSeekerModalOpen, setIsNewSeekerModalOpen] = useState(false);
+  const [newSeeker, setNewSeeker] = useState<Partial<JobSeeker>>({
+    name: "",
+    phone: "",
+    province: "تهران",
+    profession: "",
+    experienceYears: 2,
+    education: "دیپلم",
+    status: "active",
+    needsAccommodation: false,
+    notes: ""
+  });
+
+  // Edit Seeker Modal
+  const [isEditSeekerModalOpen, setIsEditSeekerModalOpen] = useState(false);
+  const [editingSeeker, setEditingSeeker] = useState<JobSeeker | null>(null);
+
+  // Sync with Firestore
+  useEffect(() => {
+    const unsubJobs = onSnapshot(collection(db, "jobs"), (snap) => {
+      if (!snap.empty) {
+        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as JobOpening));
+        setJobs(list);
+      } else {
+        // Seed initial jobs if empty
+        INITIAL_JOBS.forEach((j) => {
+          setDoc(doc(db, "jobs", j.id), j).catch(() => {});
+        });
+      }
+    });
+
+    const unsubSeekers = onSnapshot(collection(db, "job_seekers"), (snap) => {
+      if (!snap.empty) {
+        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as JobSeeker));
+        setSeekers(list);
+      } else {
+        // Seed initial seekers if empty
+        INITIAL_SEEKERS.forEach((s) => {
+          setDoc(doc(db, "job_seekers", s.id), s).catch(() => {});
+        });
+      }
+    });
+
+    return () => {
+      unsubJobs();
+      unsubSeekers();
+    };
+  }, []);
+
   // Filtered Jobs
   const filteredJobs = jobs.filter((j) => {
     const matchesSearch =
-      j.title.includes(searchTerm) ||
-      j.employer.includes(searchTerm) ||
-      j.description.includes(searchTerm) ||
-      j.phone.includes(searchTerm);
+      (j.title || "").includes(searchTerm) ||
+      (j.employer || "").includes(searchTerm) ||
+      (j.description || "").includes(searchTerm) ||
+      (j.phone || "").includes(searchTerm);
     const matchesProvince = selectedProvince === "all" || j.province === selectedProvince;
     const matchesCategory = selectedCategory === "all" || j.category === selectedCategory;
     const matchesAcc =
@@ -196,33 +281,44 @@ export default function JobPortalManagement() {
   // Filtered Seekers
   const filteredSeekers = seekers.filter((s) => {
     const matchesSearch =
-      s.name.includes(searchTerm) ||
-      s.profession.includes(searchTerm) ||
-      s.phone.includes(searchTerm) ||
-      s.notes.includes(searchTerm);
+      (s.name || "").includes(searchTerm) ||
+      (s.profession || "").includes(searchTerm) ||
+      (s.phone || "").includes(searchTerm) ||
+      (s.notes || "").includes(searchTerm);
     const matchesProvince = selectedProvince === "all" || s.province === selectedProvince;
     return matchesSearch && matchesProvince;
   });
 
   // Actions for Jobs
-  const handleToggleJobStatus = (id: string, status: "approved" | "pending" | "filled") => {
-    setJobs(jobs.map((j) => (j.id === id ? { ...j, status } : j)));
-  };
-
-  const handleDeleteJob = (id: string) => {
-    if (confirm("آیا از حذف این آگهی شغلی اطمینان دارید؟")) {
-      setJobs(jobs.filter((j) => j.id !== id));
+  const handleToggleJobStatus = async (id: string, status: "approved" | "pending" | "filled") => {
+    setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, status } : j)));
+    try {
+      await updateDoc(doc(db, "jobs", id), { status });
+    } catch {
+      // fallback
     }
   };
 
-  const handleCreateJob = (e: React.FormEvent) => {
+  const handleDeleteJob = async (id: string, title: string) => {
+    if (confirm(`آیا از حذف آگهی شغلی «${title}» اطمینان دارید؟`)) {
+      setJobs((prev) => prev.filter((j) => j.id !== id));
+      try {
+        await deleteDoc(doc(db, "jobs", id));
+      } catch {
+        // fallback
+      }
+    }
+  };
+
+  const handleCreateJob = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newJob.title || !newJob.phone) {
       alert("لطفاً عنوان شغلی و شماره تماس کارفرما را وارد فرمایید.");
       return;
     }
+    const id = `JOB-${Date.now().toString().slice(-4)}`;
     const created: JobOpening = {
-      id: `JOB-${Date.now().toString().slice(-4)}`,
+      id,
       title: newJob.title || "",
       employer: newJob.employer || "کارفرمای معتبر",
       phone: newJob.phone || "",
@@ -233,8 +329,9 @@ export default function JobPortalManagement() {
       hasAccommodation: Boolean(newJob.hasAccommodation),
       status: "approved",
       description: newJob.description || "",
-      createdAt: "امروز"
+      createdAt: new Date().toLocaleDateString("fa-IR")
     };
+
     setJobs([created, ...jobs]);
     setIsNewJobModalOpen(false);
     setNewJob({
@@ -249,17 +346,115 @@ export default function JobPortalManagement() {
       status: "approved",
       description: ""
     });
+
+    try {
+      await setDoc(doc(db, "jobs", id), created);
+    } catch {
+      // fallback
+    }
+  };
+
+  const handleOpenEditJob = (job: JobOpening) => {
+    setEditingJob({ ...job });
+    setIsEditJobModalOpen(true);
+  };
+
+  const handleSaveEditJob = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingJob) return;
+
+    setJobs((prev) => prev.map((j) => (j.id === editingJob.id ? editingJob : j)));
+    setIsEditJobModalOpen(false);
+
+    try {
+      await updateDoc(doc(db, "jobs", editingJob.id), { ...editingJob });
+    } catch {
+      // fallback
+    }
+    setEditingJob(null);
   };
 
   // Actions for Seekers
-  const handleToggleSeekerStatus = (id: string, status: "active" | "interviewing" | "hired") => {
-    setSeekers(seekers.map((s) => (s.id === id ? { ...s, status } : s)));
+  const handleToggleSeekerStatus = async (id: string, status: "active" | "interviewing" | "hired") => {
+    setSeekers((prev) => prev.map((s) => (s.id === id ? { ...s, status } : s)));
+    try {
+      await updateDoc(doc(db, "job_seekers", id), { status });
+    } catch {
+      // fallback
+    }
   };
 
-  const handleDeleteSeeker = (id: string) => {
-    if (confirm("آیا از حذف مشخصات این کارجو اطمینان دارید؟")) {
-      setSeekers(seekers.filter((s) => s.id !== id));
+  const handleDeleteSeeker = async (id: string, name: string) => {
+    if (confirm(`آیا از حذف مشخصات کارجو «${name}» اطمینان دارید؟`)) {
+      setSeekers((prev) => prev.filter((s) => s.id !== id));
+      try {
+        await deleteDoc(doc(db, "job_seekers", id));
+      } catch {
+        // fallback
+      }
     }
+  };
+
+  const handleCreateSeeker = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSeeker.name || !newSeeker.phone || !newSeeker.profession) {
+      alert("لطفاً نام، شماره تماس و تخصص کارجو را وارد فرمایید.");
+      return;
+    }
+    const id = `SEEK-${Date.now().toString().slice(-4)}`;
+    const created: JobSeeker = {
+      id,
+      name: newSeeker.name || "",
+      phone: newSeeker.phone || "",
+      province: newSeeker.province || "تهران",
+      profession: newSeeker.profession || "",
+      experienceYears: Number(newSeeker.experienceYears) || 0,
+      education: newSeeker.education || "دیپلم",
+      status: "active",
+      needsAccommodation: Boolean(newSeeker.needsAccommodation),
+      notes: newSeeker.notes || "",
+      createdAt: new Date().toLocaleDateString("fa-IR")
+    };
+
+    setSeekers([created, ...seekers]);
+    setIsNewSeekerModalOpen(false);
+    setNewSeeker({
+      name: "",
+      phone: "",
+      province: "تهران",
+      profession: "",
+      experienceYears: 2,
+      education: "دیپلم",
+      status: "active",
+      needsAccommodation: false,
+      notes: ""
+    });
+
+    try {
+      await setDoc(doc(db, "job_seekers", id), created);
+    } catch {
+      // fallback
+    }
+  };
+
+  const handleOpenEditSeeker = (seeker: JobSeeker) => {
+    setEditingSeeker({ ...seeker });
+    setIsEditSeekerModalOpen(true);
+  };
+
+  const handleSaveEditSeeker = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingSeeker) return;
+
+    setSeekers((prev) => prev.map((s) => (s.id === editingSeeker.id ? editingSeeker : s)));
+    setIsEditSeekerModalOpen(false);
+
+    try {
+      await updateDoc(doc(db, "job_seekers", editingSeeker.id), { ...editingSeeker });
+    } catch {
+      // fallback
+    }
+    setEditingSeeker(null);
   };
 
   // Export to Excel / CSV
@@ -333,7 +528,7 @@ export default function JobPortalManagement() {
             <span>مدیریت کاریابی و بانک کارجویان مهاجرین</span>
           </h2>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            بررسی و تایید آگهی‌های کارفرمایان، بانک رزومه کارجویان و اتصال مستقیم نیروهای کار به کارگاه‌ها
+            بررسی، تایید، افزودن و ویرایش آگهی‌های کارفرمایان و بانک رزومه کارجویان اتباع در سامانه
           </p>
         </div>
 
@@ -346,13 +541,21 @@ export default function JobPortalManagement() {
             <span>خروجی اکسل (CSV)</span>
           </button>
 
-          {activeTab === "jobs" && (
+          {activeTab === "jobs" ? (
             <button
               onClick={() => setIsNewJobModalOpen(true)}
               className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black flex items-center justify-center gap-2 shadow-md transition-all"
             >
               <Plus size={16} />
-              <span>ثبت آگهی جدید</span>
+              <span>ثبت آگهی شغلی جدید</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => setIsNewSeekerModalOpen(true)}
+              className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center justify-center gap-2 shadow-md transition-all"
+            >
+              <Plus size={16} />
+              <span>ثبت کارجوی جدید</span>
             </button>
           )}
         </div>
@@ -376,7 +579,7 @@ export default function JobPortalManagement() {
           onClick={() => setActiveTab("seekers")}
           className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black transition-all ${
             activeTab === "seekers"
-              ? "bg-blue-600 text-white shadow-md"
+              ? "bg-emerald-600 text-white shadow-md"
               : "text-gray-600 dark:text-gray-400 hover:bg-slate-100 dark:hover:bg-slate-800"
           }`}
         >
@@ -462,7 +665,7 @@ export default function JobPortalManagement() {
                   <th className="p-3.5">رسته و حقوق</th>
                   <th className="p-3.5">امکانات</th>
                   <th className="p-3.5">وضعیت</th>
-                  <th className="p-3.5 text-center">عملیات</th>
+                  <th className="p-3.5 text-center">عملیات (ویرایش / حذف)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-gray-700 dark:text-gray-200 font-medium">
@@ -532,13 +735,22 @@ export default function JobPortalManagement() {
                         </select>
                       </td>
                       <td className="p-3.5 text-center whitespace-nowrap">
-                        <button
-                          onClick={() => handleDeleteJob(j.id)}
-                          className="p-1.5 text-gray-400 hover:text-rose-600 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                          title="حذف آگهی"
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={() => handleOpenEditJob(j)}
+                            className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
+                            title="ویرایش آگهی شغلی"
+                          >
+                            <Edit2 size={16} />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteJob(j.id, j.title)}
+                            className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                            title="حذف آگهی"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -562,7 +774,7 @@ export default function JobPortalManagement() {
                   <th className="p-3.5">استان و اسکان</th>
                   <th className="p-3.5">مهارت‌ها و توضیحات</th>
                   <th className="p-3.5">وضعیت کارجو</th>
-                  <th className="p-3.5 text-center">عملیات</th>
+                  <th className="p-3.5 text-center">عملیات (ویرایش / حذف)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-gray-700 dark:text-gray-200 font-medium">
@@ -580,22 +792,28 @@ export default function JobPortalManagement() {
                         <div className="text-[11px] text-gray-400">{s.id} • ثبت: {s.createdAt}</div>
                       </td>
                       <td className="p-3.5 whitespace-nowrap">
-                        <div className="font-bold text-blue-600 dark:text-blue-400">{s.profession}</div>
-                        <div className="text-gray-400 text-[11px] mt-0.5">{s.experienceYears} سال سابقه کار • {s.education}</div>
+                        <div className="font-bold text-gray-900 dark:text-white">{s.profession}</div>
+                        <div className="text-gray-400 text-[11px] flex items-center gap-1 mt-0.5">
+                          <GraduationCap size={12} className="text-purple-500" />
+                          <span>{s.experienceYears} سال سابقه • مدرک: {s.education}</span>
+                        </div>
                       </td>
                       <td className="p-3.5 whitespace-nowrap">
-                        <div className="font-mono text-gray-800 dark:text-gray-200 font-bold flex items-center gap-1">
+                        <div className="font-mono text-gray-700 dark:text-gray-300 font-bold flex items-center gap-1">
                           <Phone size={12} className="text-blue-500" />
                           <span>{s.phone}</span>
                         </div>
                       </td>
                       <td className="p-3.5 whitespace-nowrap">
-                        <div className="font-bold">{s.province}</div>
-                        <div className="text-[10px] mt-0.5">
+                        <div className="font-bold flex items-center gap-1">
+                          <MapPin size={12} className="text-rose-500" />
+                          <span>{s.province}</span>
+                        </div>
+                        <div className="text-[11px] mt-0.5">
                           {s.needsAccommodation ? (
-                            <span className="text-amber-600 dark:text-amber-400 font-bold">نیازمند جای خواب</span>
+                            <span className="text-amber-600 dark:text-amber-400">نیازمند جای خواب</span>
                           ) : (
-                            <span className="text-gray-400">دارای مسکن شخصی</span>
+                            <span className="text-gray-400">بدون نیاز به اسکان</span>
                           )}
                         </div>
                       </td>
@@ -622,13 +840,22 @@ export default function JobPortalManagement() {
                         </select>
                       </td>
                       <td className="p-3.5 text-center whitespace-nowrap">
-                        <button
-                          onClick={() => handleDeleteSeeker(s.id)}
-                          className="p-1.5 text-gray-400 hover:text-rose-600 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                          title="حذف مشخصات"
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={() => handleOpenEditSeeker(s)}
+                            className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
+                            title="ویرایش مشخصات کارجو"
+                          >
+                            <Edit2 size={16} />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteSeeker(s.id, s.name)}
+                            className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                            title="حذف مشخصات"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -650,23 +877,23 @@ export default function JobPortalManagement() {
               </h3>
               <button
                 onClick={() => setIsNewJobModalOpen(false)}
-                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg"
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
               >
                 <X size={16} />
               </button>
             </div>
 
-            <form onSubmit={handleCreateJob} className="p-5 space-y-4">
+            <form onSubmit={handleCreateJob} className="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
               <div>
                 <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
-                  عنوان شغل / مهارت درخواستی *
+                  عنوان آگهی شغلی *
                 </label>
                 <input
                   type="text"
                   required
                   value={newJob.title}
                   onChange={(e) => setNewJob({ ...newJob, title: e.target.value })}
-                  placeholder="مثال: چرخکار راسته دوز، کارگر ساده، قالب‌بند"
+                  placeholder="مثال: چرخکار ماهر راسته دوز..."
                   className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -680,20 +907,21 @@ export default function JobPortalManagement() {
                     type="text"
                     value={newJob.employer}
                     onChange={(e) => setNewJob({ ...newJob, employer: e.target.value })}
-                    placeholder="مثال: کارگاه تولیدی حسینی"
+                    placeholder="تولیدی برادران..."
                     className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
+
                 <div>
                   <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
-                    شماره تماس کارفرما *
+                    تلفن تماس کارفرما *
                   </label>
                   <input
-                    type="tel"
+                    type="text"
                     required
                     value={newJob.phone}
                     onChange={(e) => setNewJob({ ...newJob, phone: e.target.value })}
-                    placeholder="0912..."
+                    placeholder="09123456789"
                     className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
                   />
                 </div>
@@ -701,9 +929,7 @@ export default function JobPortalManagement() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
-                    استان محل کار
-                  </label>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">استان</label>
                   <select
                     value={newJob.province}
                     onChange={(e) => setNewJob({ ...newJob, province: e.target.value })}
@@ -714,19 +940,20 @@ export default function JobPortalManagement() {
                     <option value="خراسان رضوی">خراسان رضوی</option>
                     <option value="البرز">البرز</option>
                     <option value="فارس">فارس</option>
-                    <option value="قم">قم</option>
                     <option value="یزد">یزد</option>
+                    <option value="قم">قم</option>
+                    <option value="مرکزی">مرکزی</option>
+                    <option value="سایر استان‌ها">سایر استان‌ها</option>
                   </select>
                 </div>
+
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
-                    شهر یا منطقه
-                  </label>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">شهر / منطقه</label>
                   <input
                     type="text"
                     value={newJob.city}
                     onChange={(e) => setNewJob({ ...newJob, city: e.target.value })}
-                    placeholder="مثال: چهاردانگه، شورآباد"
+                    placeholder="مثال: شهرک صنعتی شمس‌آباد"
                     className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -734,9 +961,7 @@ export default function JobPortalManagement() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
-                    رسته شغلی
-                  </label>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">رسته شغلی</label>
                   <select
                     value={newJob.category}
                     onChange={(e) => setNewJob({ ...newJob, category: e.target.value })}
@@ -748,12 +973,12 @@ export default function JobPortalManagement() {
                     <option value="رستوران و کافه">رستوران و کافه</option>
                     <option value="صنعتی و کارگاهی">صنعتی و کارگاهی</option>
                     <option value="خدمات و نظافت">خدمات و نظافت</option>
+                    <option value="متفرقه">سایر رسته‌ها</option>
                   </select>
                 </div>
+
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
-                    حقوق پیشنهادی
-                  </label>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">میزان حقوق</label>
                   <input
                     type="text"
                     value={newJob.salary}
@@ -764,17 +989,16 @@ export default function JobPortalManagement() {
                 </div>
               </div>
 
-              <div>
-                <label className="flex items-center gap-2 cursor-pointer pt-1">
-                  <input
-                    type="checkbox"
-                    checked={newJob.hasAccommodation}
-                    onChange={(e) => setNewJob({ ...newJob, hasAccommodation: e.target.checked })}
-                    className="rounded text-blue-600 focus:ring-blue-500"
-                  />
-                  <span className="text-xs font-bold text-gray-700 dark:text-gray-300">
-                    دارای جای خواب / سوئیت مسکونی برای نیرو
-                  </span>
+              <div className="flex items-center gap-2 p-3 bg-slate-50 dark:bg-slate-900 rounded-xl">
+                <input
+                  type="checkbox"
+                  id="hasAccommodation"
+                  checked={newJob.hasAccommodation}
+                  onChange={(e) => setNewJob({ ...newJob, hasAccommodation: e.target.checked })}
+                  className="rounded text-blue-600 focus:ring-blue-500"
+                />
+                <label htmlFor="hasAccommodation" className="text-xs font-bold text-gray-700 dark:text-gray-300">
+                  این موقعیت شغلی دارای محل اسکان / جای خواب می‌باشد
                 </label>
               </div>
 
@@ -786,24 +1010,541 @@ export default function JobPortalManagement() {
                   rows={3}
                   value={newJob.description}
                   onChange={(e) => setNewJob({ ...newJob, description: e.target.value })}
-                  placeholder="شرایط سنی، تسویه حساب، مدارک شناسایی مورد نیاز..."
+                  placeholder="شرایط سنی، تسویه حساب، غذا، بیمه و..."
                   className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2">
+              <div className="pt-2 flex justify-end gap-2 border-t border-slate-200 dark:border-slate-700">
                 <button
                   type="button"
                   onClick={() => setIsNewJobModalOpen(false)}
-                  className="px-4 py-2 text-xs rounded-xl text-gray-600 dark:text-gray-400 hover:bg-slate-100 dark:hover:bg-slate-700 font-bold"
+                  className="px-4 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 text-gray-600 dark:text-gray-400 hover:bg-slate-100"
                 >
                   انصراف
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 text-xs rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black shadow-md transition-all"
+                  className="px-4 py-2 text-xs font-black rounded-xl bg-blue-600 text-white hover:bg-blue-700 shadow-md flex items-center gap-1.5"
                 >
-                  ثبت و انتشار در سامانه
+                  <Check size={14} />
+                  <span>ثبت و انتشار آگهی</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Job Modal */}
+      {isEditJobModalOpen && editingJob && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-lg overflow-hidden border border-slate-200 dark:border-slate-700 shadow-2xl animate-in fade-in duration-200">
+            <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+              <h3 className="font-black text-sm text-gray-900 dark:text-white flex items-center gap-2">
+                <Edit2 size={16} className="text-blue-500" />
+                <span>ویرایش فرصت شغلی ({editingJob.id})</span>
+              </h3>
+              <button
+                onClick={() => setIsEditJobModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditJob} className="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                  عنوان آگهی شغلی *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editingJob.title}
+                  onChange={(e) => setEditingJob({ ...editingJob, title: e.target.value })}
+                  className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                    نام کارفرما / کارگاه
+                  </label>
+                  <input
+                    type="text"
+                    value={editingJob.employer}
+                    onChange={(e) => setEditingJob({ ...editingJob, employer: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                    تلفن تماس کارفرما *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editingJob.phone}
+                    onChange={(e) => setEditingJob({ ...editingJob, phone: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">استان</label>
+                  <select
+                    value={editingJob.province}
+                    onChange={(e) => setEditingJob({ ...editingJob, province: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="تهران">تهران</option>
+                    <option value="اصفهان">اصفهان</option>
+                    <option value="خراسان رضوی">خراسان رضوی</option>
+                    <option value="البرز">البرز</option>
+                    <option value="فارس">فارس</option>
+                    <option value="یزد">یزد</option>
+                    <option value="قم">قم</option>
+                    <option value="مرکزی">مرکزی</option>
+                    <option value="سایر استان‌ها">سایر استان‌ها</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">شهر / منطقه</label>
+                  <input
+                    type="text"
+                    value={editingJob.city}
+                    onChange={(e) => setEditingJob({ ...editingJob, city: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">رسته شغلی</label>
+                  <select
+                    value={editingJob.category}
+                    onChange={(e) => setEditingJob({ ...editingJob, category: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="پوشاک و خیاطی">پوشاک و خیاطی</option>
+                    <option value="ساختمانی و عمرانی">ساختمانی و عمرانی</option>
+                    <option value="کشاورزی و باغبانی">کشاورزی و باغبانی</option>
+                    <option value="رستوران و کافه">رستوران و کافه</option>
+                    <option value="صنعتی و کارگاهی">صنعتی و کارگاهی</option>
+                    <option value="خدمات و نظافت">خدمات و نظافت</option>
+                    <option value="متفرقه">سایر رسته‌ها</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">میزان حقوق</label>
+                  <input
+                    type="text"
+                    value={editingJob.salary}
+                    onChange={(e) => setEditingJob({ ...editingJob, salary: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">وضعیت آگهی</label>
+                  <select
+                    value={editingJob.status}
+                    onChange={(e) => setEditingJob({ ...editingJob, status: e.target.value as any })}
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="approved">تایید شده و فعال</option>
+                    <option value="pending">در انتظار تایید</option>
+                    <option value="filled">تکمیل ظرفیت / منقضی</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-2 p-3 bg-slate-50 dark:bg-slate-900 rounded-xl mt-4">
+                  <input
+                    type="checkbox"
+                    id="editHasAcc"
+                    checked={editingJob.hasAccommodation}
+                    onChange={(e) => setEditingJob({ ...editingJob, hasAccommodation: e.target.checked })}
+                    className="rounded text-blue-600 focus:ring-blue-500"
+                  />
+                  <label htmlFor="editHasAcc" className="text-xs font-bold text-gray-700 dark:text-gray-300">
+                    دارای جای خواب
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                  توضیحات و شرایط کار
+                </label>
+                <textarea
+                  rows={3}
+                  value={editingJob.description}
+                  onChange={(e) => setEditingJob({ ...editingJob, description: e.target.value })}
+                  className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2 border-t border-slate-200 dark:border-slate-700">
+                <button
+                  type="button"
+                  onClick={() => setIsEditJobModalOpen(false)}
+                  className="px-4 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 text-gray-600 dark:text-gray-400 hover:bg-slate-100"
+                >
+                  انصراف
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-xs font-black rounded-xl bg-blue-600 text-white hover:bg-blue-700 shadow-md flex items-center gap-1.5"
+                >
+                  <Save size={14} />
+                  <span>ذخیره تغییرات آگهی</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* New Seeker Modal */}
+      {isNewSeekerModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-lg overflow-hidden border border-slate-200 dark:border-slate-700 shadow-2xl animate-in fade-in duration-200">
+            <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+              <h3 className="font-black text-sm text-gray-900 dark:text-white flex items-center gap-2">
+                <Plus size={16} className="text-emerald-500" />
+                <span>ثبت کارجوی جدید در بانک رزومه</span>
+              </h3>
+              <button
+                onClick={() => setIsNewSeekerModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateSeeker} className="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                  نام و نام خانوادگی کارجو *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newSeeker.name}
+                  onChange={(e) => setNewSeeker({ ...newSeeker, name: e.target.value })}
+                  placeholder="مثال: نجیب‌الله انوری"
+                  className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                    شماره تماس مستقیم *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newSeeker.phone}
+                    onChange={(e) => setNewSeeker({ ...newSeeker, phone: e.target.value })}
+                    placeholder="09123456789"
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">استان سکونت</label>
+                  <select
+                    value={newSeeker.province}
+                    onChange={(e) => setNewSeeker({ ...newSeeker, province: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="تهران">تهران</option>
+                    <option value="اصفهان">اصفهان</option>
+                    <option value="خراسان رضوی">خراسان رضوی</option>
+                    <option value="البرز">البرز</option>
+                    <option value="فارس">فارس</option>
+                    <option value="یزد">یزد</option>
+                    <option value="قم">قم</option>
+                    <option value="مرکزی">مرکزی</option>
+                    <option value="سایر استان‌ها">سایر استان‌ها</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                    تخصص و حرفه اصلی *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newSeeker.profession}
+                    onChange={(e) => setNewSeeker({ ...newSeeker, profession: e.target.value })}
+                    placeholder="مثال: چرخکار ماهر، بنا، آشپز..."
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                    سابقه کار (سال)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="50"
+                    value={newSeeker.experienceYears}
+                    onChange={(e) => setNewSeeker({ ...newSeeker, experienceYears: Number(e.target.value) })}
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                    مدرک تحصیلی
+                  </label>
+                  <select
+                    value={newSeeker.education}
+                    onChange={(e) => setNewSeeker({ ...newSeeker, education: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="زیر دیپلم / سیکل">زیر دیپلم / سیکل</option>
+                    <option value="دیپلم">دیپلم</option>
+                    <option value="فوق دیپلم فنی">فوق دیپلم فنی</option>
+                    <option value="لیسانس">لیسانس</option>
+                    <option value="استادکار تجربی">استادکار تجربی (بدون مدرک)</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-2 p-3 bg-slate-50 dark:bg-slate-900 rounded-xl mt-4">
+                  <input
+                    type="checkbox"
+                    id="newNeedsAcc"
+                    checked={newSeeker.needsAccommodation}
+                    onChange={(e) => setNewSeeker({ ...newSeeker, needsAccommodation: e.target.checked })}
+                    className="rounded text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <label htmlFor="newNeedsAcc" className="text-xs font-bold text-gray-700 dark:text-gray-300">
+                    نیازمند جای خواب و اسکان
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                  مهارت‌ها، سوابق قبلی و توضیحات تکمیلی
+                </label>
+                <textarea
+                  rows={3}
+                  value={newSeeker.notes}
+                  onChange={(e) => setNewSeeker({ ...newSeeker, notes: e.target.value })}
+                  placeholder="سابقه در کارگاه‌های قبلی، مدارک مهارتی، وضعیت اقامتی و..."
+                  className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2 border-t border-slate-200 dark:border-slate-700">
+                <button
+                  type="button"
+                  onClick={() => setIsNewSeekerModalOpen(false)}
+                  className="px-4 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 text-gray-600 dark:text-gray-400 hover:bg-slate-100"
+                >
+                  انصراف
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-xs font-black rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 shadow-md flex items-center gap-1.5"
+                >
+                  <Check size={14} />
+                  <span>ثبت کارجو در سیستم</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Seeker Modal */}
+      {isEditSeekerModalOpen && editingSeeker && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-lg overflow-hidden border border-slate-200 dark:border-slate-700 shadow-2xl animate-in fade-in duration-200">
+            <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+              <h3 className="font-black text-sm text-gray-900 dark:text-white flex items-center gap-2">
+                <Edit2 size={16} className="text-emerald-500" />
+                <span>ویرایش اطلاعات کارجو ({editingSeeker.id})</span>
+              </h3>
+              <button
+                onClick={() => setIsEditSeekerModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditSeeker} className="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                  نام و نام خانوادگی کارجو *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editingSeeker.name}
+                  onChange={(e) => setEditingSeeker({ ...editingSeeker, name: e.target.value })}
+                  className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                    شماره تماس مستقیم *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editingSeeker.phone}
+                    onChange={(e) => setEditingSeeker({ ...editingSeeker, phone: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">استان سکونت</label>
+                  <select
+                    value={editingSeeker.province}
+                    onChange={(e) => setEditingSeeker({ ...editingSeeker, province: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="تهران">تهران</option>
+                    <option value="اصفهان">اصفهان</option>
+                    <option value="خراسان رضوی">خراسان رضوی</option>
+                    <option value="البرز">البرز</option>
+                    <option value="فارس">فارس</option>
+                    <option value="یزد">یزد</option>
+                    <option value="قم">قم</option>
+                    <option value="مرکزی">مرکزی</option>
+                    <option value="سایر استان‌ها">سایر استان‌ها</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                    تخصص و حرفه اصلی *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editingSeeker.profession}
+                    onChange={(e) => setEditingSeeker({ ...editingSeeker, profession: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                    سابقه کار (سال)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="50"
+                    value={editingSeeker.experienceYears}
+                    onChange={(e) => setEditingSeeker({ ...editingSeeker, experienceYears: Number(e.target.value) })}
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                    مدرک تحصیلی
+                  </label>
+                  <select
+                    value={editingSeeker.education}
+                    onChange={(e) => setEditingSeeker({ ...editingSeeker, education: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="زیر دیپلم / سیکل">زیر دیپلم / سیکل</option>
+                    <option value="دیپلم">دیپلم</option>
+                    <option value="فوق دیپلم فنی">فوق دیپلم فنی</option>
+                    <option value="لیسانس">لیسانس</option>
+                    <option value="استادکار تجربی">استادکار تجربی (بدون مدرک)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                    وضعیت کارجو
+                  </label>
+                  <select
+                    value={editingSeeker.status}
+                    onChange={(e) => setEditingSeeker({ ...editingSeeker, status: e.target.value as any })}
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="active">آماده به کار (آزاد)</option>
+                    <option value="interviewing">معرفی به کارفرما</option>
+                    <option value="hired">شاغل شده و مشغول</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 p-3 bg-slate-50 dark:bg-slate-900 rounded-xl">
+                <input
+                  type="checkbox"
+                  id="editNeedsAcc"
+                  checked={editingSeeker.needsAccommodation}
+                  onChange={(e) => setEditingSeeker({ ...editingSeeker, needsAccommodation: e.target.checked })}
+                  className="rounded text-emerald-600 focus:ring-emerald-500"
+                />
+                <label htmlFor="editNeedsAcc" className="text-xs font-bold text-gray-700 dark:text-gray-300">
+                  نیازمند جای خواب و اسکان
+                </label>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                  مهارت‌ها، سوابق قبلی و توضیحات تکمیلی
+                </label>
+                <textarea
+                  rows={3}
+                  value={editingSeeker.notes}
+                  onChange={(e) => setEditingSeeker({ ...editingSeeker, notes: e.target.value })}
+                  className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2 border-t border-slate-200 dark:border-slate-700">
+                <button
+                  type="button"
+                  onClick={() => setIsEditSeekerModalOpen(false)}
+                  className="px-4 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 text-gray-600 dark:text-gray-400 hover:bg-slate-100"
+                >
+                  انصراف
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-xs font-black rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 shadow-md flex items-center gap-1.5"
+                >
+                  <Save size={14} />
+                  <span>ذخیره تغییرات کارجو</span>
                 </button>
               </div>
             </form>
