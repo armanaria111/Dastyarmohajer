@@ -88,6 +88,39 @@ export const DEFAULT_BOT_LINKS: BotLinkItem[] = [
     color: "from-purple-600 to-violet-500",
   },
   {
+    id: "soroush",
+    name: "Soroush+",
+    persianName: "بازوی سروش پلاس",
+    iconType: "soroush",
+    url: "https://splus.ir/dastyar_mohajer_bot",
+    username: "@dastyar_mohajer_bot",
+    description: "پاسخگویی سریع به مراجعین و استعلام نوبت دفاتر کفالت در سروش+",
+    isActive: true,
+    color: "from-blue-500 to-cyan-600",
+  },
+  {
+    id: "gap",
+    name: "Gap",
+    persianName: "ربات تعاملی گپ",
+    iconType: "gap",
+    url: "https://gap.im/dastyar_mohajer_bot",
+    username: "@dastyar_mohajer_bot",
+    description: "پیگیری مدارک اقامتی و اتصال به شبکه خدمات الکترونیک در گپ",
+    isActive: true,
+    color: "from-sky-500 to-blue-700",
+  },
+  {
+    id: "igap",
+    name: "iGap",
+    persianName: "بات هوشمند آی‌گپ",
+    iconType: "igap",
+    url: "https://igap.net/dastyar_mohajer_bot",
+    username: "@dastyar_mohajer_bot",
+    description: "مشاوره آنلاین قوانین اشتغال، کارفرمایان و تمدید مدارک در آی‌گپ",
+    isActive: true,
+    color: "from-indigo-500 to-blue-600",
+  },
+  {
     id: "whatsapp",
     name: "WhatsApp",
     persianName: "پشتیبانی واتساپ",
@@ -97,6 +130,17 @@ export const DEFAULT_BOT_LINKS: BotLinkItem[] = [
     description: "ارتباط مستقیم جهت پیگیری موارد خاص و پشتیبانی مراجعین",
     isActive: true,
     color: "from-green-600 to-emerald-500",
+  },
+  {
+    id: "shad",
+    name: "Shad",
+    persianName: "کانال و بازوی شاد (آموزش)",
+    iconType: "shad",
+    url: "https://shad.ir/dastyar_mohajer",
+    username: "@dastyar_mohajer",
+    description: "راهنمای ثبت‌نام مدارس، برگه‌های سنجش سلامت و تسهیلات آموزشی اتباع",
+    isActive: true,
+    color: "from-teal-600 to-emerald-600",
   },
 ];
 
@@ -198,10 +242,19 @@ export function getLandingConfig(): LandingConfig {
 
   try {
     const parsed = JSON.parse(raw);
+    let loadedBots = Array.isArray(parsed?.botLinks) && parsed.botLinks.length > 0 ? parsed.botLinks : DEFAULT_BOT_LINKS;
+
+    // If existing saved bots only had 5 bots or missing official ones, merge the missing official platforms
+    const existingIds = new Set(loadedBots.map((b: BotLinkItem) => b.id));
+    const missingDefaults = DEFAULT_BOT_LINKS.filter((db) => !existingIds.has(db.id));
+    if (missingDefaults.length > 0) {
+      loadedBots = [...loadedBots, ...missingDefaults];
+    }
+
     return {
       ...defaultConfig,
       ...parsed,
-      botLinks: Array.isArray(parsed?.botLinks) && parsed.botLinks.length > 0 ? parsed.botLinks : DEFAULT_BOT_LINKS,
+      botLinks: loadedBots,
       newsChannels: Array.isArray(parsed?.newsChannels) && parsed.newsChannels.length > 0 ? parsed.newsChannels : DEFAULT_NEWS_CHANNELS,
       announcementText: parsed?.announcementText || defaultConfig.announcementText,
     };

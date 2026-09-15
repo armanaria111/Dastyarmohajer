@@ -25,6 +25,14 @@ import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc } fro
 import { db } from "../firebase";
 import { exportToCSV } from "../utils/exportUtils";
 
+const safeSetItem = (key: string, value: string) => {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // fallback
+  }
+};
+
 export interface JobOpening {
   id: string;
   title: string;
@@ -363,11 +371,13 @@ export default function JobPortalManagement() {
     e.preventDefault();
     if (!editingJob) return;
 
-    setJobs((prev) => prev.map((j) => (j.id === editingJob.id ? editingJob : j)));
+    const updated = jobs.map((j) => (j.id === editingJob.id ? editingJob : j));
+    setJobs(updated);
+    safeSetItem("admin_jobs", JSON.stringify(updated));
     setIsEditJobModalOpen(false);
 
     try {
-      await updateDoc(doc(db, "jobs", editingJob.id), { ...editingJob });
+      await setDoc(doc(db, "jobs", editingJob.id), editingJob, { merge: true });
     } catch {
       // fallback
     }
@@ -446,11 +456,13 @@ export default function JobPortalManagement() {
     e.preventDefault();
     if (!editingSeeker) return;
 
-    setSeekers((prev) => prev.map((s) => (s.id === editingSeeker.id ? editingSeeker : s)));
+    const updated = seekers.map((s) => (s.id === editingSeeker.id ? editingSeeker : s));
+    setSeekers(updated);
+    safeSetItem("admin_job_seekers", JSON.stringify(updated));
     setIsEditSeekerModalOpen(false);
 
     try {
-      await updateDoc(doc(db, "job_seekers", editingSeeker.id), { ...editingSeeker });
+      await setDoc(doc(db, "job_seekers", editingSeeker.id), editingSeeker, { merge: true });
     } catch {
       // fallback
     }
@@ -652,216 +664,408 @@ export default function JobPortalManagement() {
         )}
       </div>
 
-      {/* Main Content: Jobs Table */}
+      {/* Main Content: Jobs Section */}
       {activeTab === "jobs" && (
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-xs">
-          <div className="overflow-x-auto">
-            <table className="w-full text-right text-xs">
-              <thead className="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-700 text-gray-500 dark:text-gray-400 font-black">
-                <tr>
-                  <th className="p-3.5">کد و عنوان شغل</th>
-                  <th className="p-3.5">کارفرما و تلفن</th>
-                  <th className="p-3.5">استان و شهر</th>
-                  <th className="p-3.5">رسته و حقوق</th>
-                  <th className="p-3.5">امکانات</th>
-                  <th className="p-3.5">وضعیت</th>
-                  <th className="p-3.5 text-center">عملیات (ویرایش / حذف)</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-gray-700 dark:text-gray-200 font-medium">
-                {filteredJobs.length === 0 ? (
+        <div className="space-y-4">
+          {/* Mobile & Tablet Card View for Jobs */}
+          <div className="block lg:hidden space-y-3">
+            {filteredJobs.length === 0 ? (
+              <div className="p-8 text-center text-gray-400 bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-slate-700">
+                هیچ فرصت شغلی مطابق فیلتر یافت نشد.
+              </div>
+            ) : (
+              filteredJobs.map((j) => (
+                <div
+                  key={`card_${j.id}`}
+                  className="p-4 rounded-2xl bg-white dark:bg-gray-800 border border-slate-200 dark:border-slate-700 shadow-xs space-y-3"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="font-black text-sm text-gray-900 dark:text-white">{j.title}</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                        {j.employer} • <span className="font-mono">{j.id}</span>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-[11px] font-bold">
+                      {j.category}
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-gray-600 dark:text-gray-300 line-clamp-2">
+                    {j.description}
+                  </p>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-slate-100 dark:border-slate-700/60">
+                    <div>
+                      <span className="text-gray-400 text-[10px] block">استان و شهر:</span>
+                      <span className="font-bold">{j.province} - {j.city}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 text-[10px] block">میزان حقوق:</span>
+                      <span className="font-bold text-emerald-600 dark:text-emerald-400">{j.salary}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 text-[10px] block">شماره تماس:</span>
+                      <span className="font-mono font-bold" dir="ltr">{j.phone}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 text-[10px] block">امکانات اقامتی:</span>
+                      <span>{j.hasAccommodation ? "دارای جای خواب" : "بدون جای خواب"}</span>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-700 flex items-center gap-2">
+                    <button
+                      onClick={() => handleOpenEditJob(j)}
+                      className="flex-1 py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all"
+                    >
+                      <Edit2 size={13} />
+                      <span>ویرایش آگهی شغلی</span>
+                    </button>
+
+                    <select
+                      value={j.status}
+                      onChange={(e) => handleToggleJobStatus(j.id, e.target.value as any)}
+                      className="py-1.5 px-2 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700"
+                    >
+                      <option value="approved">تایید شده</option>
+                      <option value="pending">در انتظار</option>
+                      <option value="filled">منقضی</option>
+                    </select>
+
+                    <button
+                      onClick={() => handleDeleteJob(j.id, j.title)}
+                      className="p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-xl"
+                      title="حذف آگهی"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Desktop Table for Jobs */}
+          <div className="hidden lg:block bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-xs">
+            <div className="overflow-x-auto">
+              <table className="w-full text-right text-xs">
+                <thead className="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-700 text-gray-500 dark:text-gray-400 font-black">
                   <tr>
-                    <td colSpan={7} className="p-8 text-center text-gray-400">
-                      هیچ فرصت شغلی مطابق فیلتر یافت نشد.
-                    </td>
+                    <th className="p-3.5">کد و عنوان شغل</th>
+                    <th className="p-3.5">کارفرما و تلفن</th>
+                    <th className="p-3.5">استان و شهر</th>
+                    <th className="p-3.5">رسته و حقوق</th>
+                    <th className="p-3.5">امکانات</th>
+                    <th className="p-3.5">وضعیت</th>
+                    <th className="p-3.5 text-center">عملیات مدیریت</th>
                   </tr>
-                ) : (
-                  filteredJobs.map((j) => (
-                    <tr key={j.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-750 transition-colors">
-                      <td className="p-3.5">
-                        <div className="font-black text-sm text-gray-900 dark:text-white">{j.title}</div>
-                        <div className="text-[11px] text-gray-400 mt-0.5">{j.id} • ثبت: {j.createdAt}</div>
-                        <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1 line-clamp-1 max-w-md">
-                          {j.description}
-                        </p>
-                      </td>
-                      <td className="p-3.5 whitespace-nowrap">
-                        <div className="font-bold">{j.employer}</div>
-                        <div className="text-gray-500 font-mono text-[11px] flex items-center gap-1 mt-0.5">
-                          <Phone size={12} className="text-blue-500" />
-                          <span>{j.phone}</span>
-                        </div>
-                      </td>
-                      <td className="p-3.5 whitespace-nowrap">
-                        <div className="flex items-center gap-1 font-bold">
-                          <MapPin size={12} className="text-rose-500" />
-                          <span>{j.province}</span>
-                        </div>
-                        <div className="text-gray-400 text-[11px] mt-0.5">{j.city}</div>
-                      </td>
-                      <td className="p-3.5 whitespace-nowrap">
-                        <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-[11px] font-bold">
-                          {j.category}
-                        </span>
-                        <div className="text-emerald-600 dark:text-emerald-400 font-bold mt-1 text-[11px]">
-                          {j.salary}
-                        </div>
-                      </td>
-                      <td className="p-3.5 whitespace-nowrap">
-                        {j.hasAccommodation ? (
-                          <span className="px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 text-[10px] font-black flex items-center gap-1 w-fit">
-                            <Home size={11} />
-                            <span>دارای جای خواب</span>
-                          </span>
-                        ) : (
-                          <span className="text-gray-400 text-[11px]">بدون جای خواب</span>
-                        )}
-                      </td>
-                      <td className="p-3.5 whitespace-nowrap">
-                        <select
-                          value={j.status}
-                          onChange={(e) => handleToggleJobStatus(j.id, e.target.value as any)}
-                          className={`text-xs font-black px-2.5 py-1 rounded-xl border transition-colors ${
-                            j.status === "approved"
-                              ? "bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 border-emerald-300 dark:border-emerald-800"
-                              : j.status === "pending"
-                              ? "bg-amber-50 dark:bg-amber-950/50 text-amber-600 border-amber-300 dark:border-amber-800"
-                              : "bg-gray-100 dark:bg-gray-700 text-gray-500 border-gray-300 dark:border-gray-600"
-                          }`}
-                        >
-                          <option value="approved">تایید شده و فعال</option>
-                          <option value="pending">در انتظار تایید</option>
-                          <option value="filled">تکمیل ظرفیت / منقضی</option>
-                        </select>
-                      </td>
-                      <td className="p-3.5 text-center whitespace-nowrap">
-                        <div className="flex items-center justify-center gap-1.5">
-                          <button
-                            onClick={() => handleOpenEditJob(j)}
-                            className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
-                            title="ویرایش آگهی شغلی"
-                          >
-                            <Edit2 size={16} />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteJob(j.id, j.title)}
-                            className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
-                            title="حذف آگهی"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-gray-700 dark:text-gray-200 font-medium">
+                  {filteredJobs.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="p-8 text-center text-gray-400">
+                        هیچ فرصت شغلی مطابق فیلتر یافت نشد.
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  ) : (
+                    filteredJobs.map((j) => (
+                      <tr
+                        key={j.id}
+                        onDoubleClick={() => handleOpenEditJob(j)}
+                        className="hover:bg-slate-50/70 dark:hover:bg-slate-750 transition-colors cursor-pointer"
+                        title="برای ویرایش دوبار کلیک کنید"
+                      >
+                        <td className="p-3.5">
+                          <div className="font-black text-sm text-gray-900 dark:text-white">{j.title}</div>
+                          <div className="text-[11px] text-gray-400 mt-0.5">{j.id} • ثبت: {j.createdAt}</div>
+                          <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1 line-clamp-1 max-w-md">
+                            {j.description}
+                          </p>
+                        </td>
+                        <td className="p-3.5 whitespace-nowrap">
+                          <div className="font-bold">{j.employer}</div>
+                          <div className="text-gray-500 font-mono text-[11px] flex items-center gap-1 mt-0.5">
+                            <Phone size={12} className="text-blue-500" />
+                            <span>{j.phone}</span>
+                          </div>
+                        </td>
+                        <td className="p-3.5 whitespace-nowrap">
+                          <div className="flex items-center gap-1 font-bold">
+                            <MapPin size={12} className="text-rose-500" />
+                            <span>{j.province}</span>
+                          </div>
+                          <div className="text-gray-400 text-[11px] mt-0.5">{j.city}</div>
+                        </td>
+                        <td className="p-3.5 whitespace-nowrap">
+                          <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-[11px] font-bold">
+                            {j.category}
+                          </span>
+                          <div className="text-emerald-600 dark:text-emerald-400 font-bold mt-1 text-[11px]">
+                            {j.salary}
+                          </div>
+                        </td>
+                        <td className="p-3.5 whitespace-nowrap">
+                          {j.hasAccommodation ? (
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 text-[10px] font-black flex items-center gap-1 w-fit">
+                              <Home size={11} />
+                              <span>دارای جای خواب</span>
+                            </span>
+                          ) : (
+                            <span className="text-gray-400 text-[11px]">بدون جای خواب</span>
+                          )}
+                        </td>
+                        <td className="p-3.5 whitespace-nowrap">
+                          <select
+                            value={j.status}
+                            onChange={(e) => handleToggleJobStatus(j.id, e.target.value as any)}
+                            className={`text-xs font-black px-2.5 py-1 rounded-xl border transition-colors ${
+                              j.status === "approved"
+                                ? "bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 border-emerald-300 dark:border-emerald-800"
+                                : j.status === "pending"
+                                ? "bg-amber-50 dark:bg-amber-950/50 text-amber-600 border-amber-300 dark:border-amber-800"
+                                : "bg-gray-100 dark:bg-gray-700 text-gray-500 border-gray-300 dark:border-gray-600"
+                            }`}
+                          >
+                            <option value="approved">تایید شده و فعال</option>
+                            <option value="pending">در انتظار تایید</option>
+                            <option value="filled">تکمیل ظرفیت / منقضی</option>
+                          </select>
+                        </td>
+                        <td className="p-3.5 text-center whitespace-nowrap">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenEditJob(j);
+                              }}
+                              className="px-3 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-900/40 hover:bg-blue-100 dark:hover:bg-blue-800 text-blue-700 dark:text-blue-300 font-black text-xs inline-flex items-center gap-1.5 transition-all border border-blue-200 dark:border-blue-700 shadow-xs"
+                              title="ویرایش آگهی شغلی"
+                            >
+                              <Edit2 size={13} />
+                              <span>ویرایش آگهی</span>
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteJob(j.id, j.title);
+                              }}
+                              className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                              title="حذف آگهی"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Main Content: Seekers Table */}
+      {/* Main Content: Seekers Section */}
       {activeTab === "seekers" && (
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-xs">
-          <div className="overflow-x-auto">
-            <table className="w-full text-right text-xs">
-              <thead className="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-700 text-gray-500 dark:text-gray-400 font-black">
-                <tr>
-                  <th className="p-3.5">مشخصات کارجو</th>
-                  <th className="p-3.5">تخصص و سابقه</th>
-                  <th className="p-3.5">شماره تماس</th>
-                  <th className="p-3.5">استان و اسکان</th>
-                  <th className="p-3.5">مهارت‌ها و توضیحات</th>
-                  <th className="p-3.5">وضعیت کارجو</th>
-                  <th className="p-3.5 text-center">عملیات (ویرایش / حذف)</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-gray-700 dark:text-gray-200 font-medium">
-                {filteredSeekers.length === 0 ? (
+        <div className="space-y-4">
+          {/* Mobile & Tablet Card View for Seekers */}
+          <div className="block lg:hidden space-y-3">
+            {filteredSeekers.length === 0 ? (
+              <div className="p-8 text-center text-gray-400 bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-slate-700">
+                هیچ کارجویی مطابق فیلتر یافت نشد.
+              </div>
+            ) : (
+              filteredSeekers.map((s) => (
+                <div
+                  key={`card_seeker_${s.id}`}
+                  className="p-4 rounded-2xl bg-white dark:bg-gray-800 border border-slate-200 dark:border-slate-700 shadow-xs space-y-3"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="font-black text-sm text-gray-900 dark:text-white">{s.name}</div>
+                      <div className="text-xs text-blue-600 dark:text-blue-400 font-bold mt-0.5">
+                        {s.profession} • {s.experienceYears} سال سابقه
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-[11px] font-bold">
+                      {s.education}
+                    </span>
+                  </div>
+
+                  {s.notes && (
+                    <p className="text-xs text-gray-600 dark:text-gray-300 line-clamp-2">
+                      {s.notes}
+                    </p>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-slate-100 dark:border-slate-700/60">
+                    <div>
+                      <span className="text-gray-400 text-[10px] block">استان سکونت:</span>
+                      <span className="font-bold">{s.province}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 text-[10px] block">شماره تماس:</span>
+                      <span className="font-mono font-bold" dir="ltr">{s.phone}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 text-[10px] block">اسکان:</span>
+                      <span>{s.needsAccommodation ? "نیازمند خوابگاه" : "دارای محل سکونت"}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 text-[10px] block">وضعیت:</span>
+                      <span className="font-bold">
+                        {s.status === "active" ? "آماده به کار" : s.status === "interviewing" ? "در حال مصاحبه" : "شاغل شده"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-700 flex items-center gap-2">
+                    <button
+                      onClick={() => handleOpenEditSeeker(s)}
+                      className="flex-1 py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all"
+                    >
+                      <Edit2 size={13} />
+                      <span>ویرایش مشخصات کارجو</span>
+                    </button>
+
+                    <select
+                      value={s.status}
+                      onChange={(e) => handleToggleSeekerStatus(s.id, e.target.value as any)}
+                      className="py-1.5 px-2 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700"
+                    >
+                      <option value="active">آماده به کار</option>
+                      <option value="interviewing">مصاحبه</option>
+                      <option value="hired">شاغل شده</option>
+                    </select>
+
+                    <button
+                      onClick={() => handleDeleteSeeker(s.id, s.name)}
+                      className="p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-xl"
+                      title="حذف کارجو"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Desktop Table for Seekers */}
+          <div className="hidden lg:block bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-xs">
+            <div className="overflow-x-auto">
+              <table className="w-full text-right text-xs">
+                <thead className="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-700 text-gray-500 dark:text-gray-400 font-black">
                   <tr>
-                    <td colSpan={7} className="p-8 text-center text-gray-400">
-                      هیچ کارجویی مطابق فیلتر یافت نشد.
-                    </td>
+                    <th className="p-3.5">مشخصات کارجو</th>
+                    <th className="p-3.5">تخصص و سابقه</th>
+                    <th className="p-3.5">شماره تماس</th>
+                    <th className="p-3.5">استان و اسکان</th>
+                    <th className="p-3.5">مهارت‌ها و توضیحات</th>
+                    <th className="p-3.5">وضعیت کارجو</th>
+                    <th className="p-3.5 text-center">عملیات مدیریت</th>
                   </tr>
-                ) : (
-                  filteredSeekers.map((s) => (
-                    <tr key={s.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-750 transition-colors">
-                      <td className="p-3.5 whitespace-nowrap">
-                        <div className="font-black text-sm text-gray-900 dark:text-white">{s.name}</div>
-                        <div className="text-[11px] text-gray-400">{s.id} • ثبت: {s.createdAt}</div>
-                      </td>
-                      <td className="p-3.5 whitespace-nowrap">
-                        <div className="font-bold text-gray-900 dark:text-white">{s.profession}</div>
-                        <div className="text-gray-400 text-[11px] flex items-center gap-1 mt-0.5">
-                          <GraduationCap size={12} className="text-purple-500" />
-                          <span>{s.experienceYears} سال سابقه • مدرک: {s.education}</span>
-                        </div>
-                      </td>
-                      <td className="p-3.5 whitespace-nowrap">
-                        <div className="font-mono text-gray-700 dark:text-gray-300 font-bold flex items-center gap-1">
-                          <Phone size={12} className="text-blue-500" />
-                          <span>{s.phone}</span>
-                        </div>
-                      </td>
-                      <td className="p-3.5 whitespace-nowrap">
-                        <div className="font-bold flex items-center gap-1">
-                          <MapPin size={12} className="text-rose-500" />
-                          <span>{s.province}</span>
-                        </div>
-                        <div className="text-[11px] mt-0.5">
-                          {s.needsAccommodation ? (
-                            <span className="text-amber-600 dark:text-amber-400">نیازمند جای خواب</span>
-                          ) : (
-                            <span className="text-gray-400">بدون نیاز به اسکان</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="p-3.5">
-                        <p className="text-[11px] text-gray-600 dark:text-gray-300 line-clamp-2 max-w-sm">
-                          {s.notes}
-                        </p>
-                      </td>
-                      <td className="p-3.5 whitespace-nowrap">
-                        <select
-                          value={s.status}
-                          onChange={(e) => handleToggleSeekerStatus(s.id, e.target.value as any)}
-                          className={`text-xs font-black px-2.5 py-1 rounded-xl border transition-colors ${
-                            s.status === "active"
-                              ? "bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 border-emerald-300 dark:border-emerald-800"
-                              : s.status === "interviewing"
-                              ? "bg-blue-50 dark:bg-blue-950/50 text-blue-600 border-blue-300 dark:border-blue-800"
-                              : "bg-slate-100 dark:bg-slate-700 text-slate-500 border-slate-300 dark:border-slate-600"
-                          }`}
-                        >
-                          <option value="active">آماده به کار (آزاد)</option>
-                          <option value="interviewing">معرفی به کارفرما</option>
-                          <option value="hired">شاغل شده و مشغول</option>
-                        </select>
-                      </td>
-                      <td className="p-3.5 text-center whitespace-nowrap">
-                        <div className="flex items-center justify-center gap-1.5">
-                          <button
-                            onClick={() => handleOpenEditSeeker(s)}
-                            className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
-                            title="ویرایش مشخصات کارجو"
-                          >
-                            <Edit2 size={16} />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteSeeker(s.id, s.name)}
-                            className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
-                            title="حذف مشخصات"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-gray-700 dark:text-gray-200 font-medium">
+                  {filteredSeekers.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="p-8 text-center text-gray-400">
+                        هیچ کارجویی مطابق فیلتر یافت نشد.
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  ) : (
+                    filteredSeekers.map((s) => (
+                      <tr
+                        key={s.id}
+                        onDoubleClick={() => handleOpenEditSeeker(s)}
+                        className="hover:bg-slate-50/70 dark:hover:bg-slate-750 transition-colors cursor-pointer"
+                        title="برای ویرایش دوبار کلیک کنید"
+                      >
+                        <td className="p-3.5 whitespace-nowrap">
+                          <div className="font-black text-sm text-gray-900 dark:text-white">{s.name}</div>
+                          <div className="text-[11px] text-gray-400">{s.id} • ثبت: {s.createdAt}</div>
+                        </td>
+                        <td className="p-3.5 whitespace-nowrap">
+                          <div className="font-bold text-gray-900 dark:text-white">{s.profession}</div>
+                          <div className="text-gray-400 text-[11px] flex items-center gap-1 mt-0.5">
+                            <GraduationCap size={12} className="text-purple-500" />
+                            <span>{s.experienceYears} سال سابقه • مدرک: {s.education}</span>
+                          </div>
+                        </td>
+                        <td className="p-3.5 whitespace-nowrap">
+                          <div className="font-mono text-gray-700 dark:text-gray-300 font-bold flex items-center gap-1">
+                            <Phone size={12} className="text-blue-500" />
+                            <span>{s.phone}</span>
+                          </div>
+                        </td>
+                        <td className="p-3.5 whitespace-nowrap">
+                          <div className="font-bold flex items-center gap-1">
+                            <MapPin size={12} className="text-rose-500" />
+                            <span>{s.province}</span>
+                          </div>
+                          <div className="text-[11px] mt-0.5">
+                            {s.needsAccommodation ? (
+                              <span className="text-amber-600 dark:text-amber-400">نیازمند جای خواب</span>
+                            ) : (
+                              <span className="text-gray-400">بدون نیاز به اسکان</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="p-3.5">
+                          <p className="text-[11px] text-gray-600 dark:text-gray-300 line-clamp-2 max-w-sm">
+                            {s.notes}
+                          </p>
+                        </td>
+                        <td className="p-3.5 whitespace-nowrap">
+                          <select
+                            value={s.status}
+                            onChange={(e) => handleToggleSeekerStatus(s.id, e.target.value as any)}
+                            className={`text-xs font-black px-2.5 py-1 rounded-xl border transition-colors ${
+                              s.status === "active"
+                                ? "bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 border-emerald-300 dark:border-emerald-800"
+                                : s.status === "interviewing"
+                                ? "bg-blue-50 dark:bg-blue-950/50 text-blue-600 border-blue-300 dark:border-blue-800"
+                                : "bg-slate-100 dark:bg-slate-700 text-slate-500 border-slate-300 dark:border-slate-600"
+                            }`}
+                          >
+                            <option value="active">آماده به کار (آزاد)</option>
+                            <option value="interviewing">معرفی به کارفرما</option>
+                            <option value="hired">شاغل شده و مشغول</option>
+                          </select>
+                        </td>
+                        <td className="p-3.5 text-center whitespace-nowrap">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenEditSeeker(s);
+                              }}
+                              className="px-3 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-900/40 hover:bg-blue-100 dark:hover:bg-blue-800 text-blue-700 dark:text-blue-300 font-black text-xs inline-flex items-center gap-1.5 transition-all border border-blue-200 dark:border-blue-700 shadow-xs"
+                              title="ویرایش مشخصات کارجو"
+                            >
+                              <Edit2 size={13} />
+                              <span>ویرایش کارجو</span>
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteSeeker(s.id, s.name);
+                              }}
+                              className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                              title="حذف مشخصات"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}

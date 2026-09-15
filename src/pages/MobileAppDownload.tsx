@@ -1,77 +1,68 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Smartphone,
   Download,
   CheckCircle2,
   Share2,
-  Copy,
-  ExternalLink,
-  Code,
-  ShieldCheck,
-  Zap,
   ArrowRight,
-  Layers,
-  Terminal,
+  Zap,
   RefreshCw,
-  QrCode,
-  FileCode2,
-  Info
+  ShieldCheck,
+  HelpCircle,
+  ExternalLink,
+  ChevronDown,
+  Sparkles,
+  WifiOff
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { usePWAInstall } from '../hooks/usePWAInstall';
+import { getAppDownloadConfig, AppDownloadConfig } from '../data/appDownloadSettings';
 
 export default function MobileAppDownload() {
   const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
-  const [copiedSection, setCopiedSection] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'pwa' | 'twa' | 'bubblewrap' | 'assetlinks'>('pwa');
+  const [downloadConfig, setDownloadConfig] = useState<AppDownloadConfig>(getAppDownloadConfig);
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
 
-  const appUrl = window.location.origin;
+  useEffect(() => {
+    setDownloadConfig(getAppDownloadConfig());
+  }, []);
 
-  const copyToClipboard = (text: string, sectionId: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedSection(sectionId);
-    setTimeout(() => setCopiedSection(null), 2500);
-  };
-
-  const bubblewrapCommands = `# ۱. نصب ابزار رسمی گوگل برای خروجی TWA / APK
-npm install -g @bubblewrap/cli
-
-# ۲. ایجاد پروژه اندروید بر اساس مانیفست دستیار مهاجر
-bubblewrap init --manifest="${appUrl}/manifest.json"
-
-# ۳. کامپایل و تولید خودکار فایل نهایی app-release-signed.apk
-bubblewrap build`;
-
-  const assetLinksJson = `[
-  {
-    "relation": ["delegate_permission/common.handle_all_urls"],
-    "target": {
-      "namespace": "android_app",
-      "package_name": "com.mohajer.assistant",
-      "sha256_cert_fingerprints": [
-        "14:6D:E9:7D:0F:52:AB:FC:A7:EC:48:7B:64:CA:0E:CF:06:5D:2D:BE:0C:08:7A:B4:73:27:0D:37:A6:61:94:E9"
-      ]
-    }
-  }
-]`;
+  const faqs = [
+    {
+      q: 'آیا نصب اپلیکیشن هزینه دارد؟',
+      a: 'خیر، استفاده و نصب اپلیکیشن دستیار مهاجر کاملاً رایگان است و هیچ هزینه‌ای برای شما ندارد.',
+    },
+    {
+      q: 'آیا برای باز شدن اپلیکیشن به فیلترشکن نیاز است؟',
+      a: 'خیر، کلیه سرورهای سامانه با بالاترین سرعت و بدون نیاز به هیچ‌گونه ابزار فیلترشکن در دسترس شما قرار دارد.',
+    },
+    {
+      q: 'آیا اپلیکیشن حافظه گوشی را پر می‌کند؟',
+      a: 'خیر، به لطف تکنولوژی وب‌اپلیکیشن هوشمند (PWA / WebAPK)، حجم این برنامه کمتر از ۳ مگابایت است و کمترین مصرف باتری و رم را دارد.',
+    },
+    {
+      q: 'چگونه اپلیکیشن به‌روزرسانی (آپدیت) می‌شود؟',
+      a: 'تمام به‌روزرسانی‌ها، بخشنامه‌های جدید، اخبار و تغییرات به صورت کاملاً خودکار اعمال می‌شوند و نیازی به دانلود مجدد فایل ندارید.',
+    },
+  ];
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 p-4 sm:p-6 lg:p-8 font-sans">
-      <div className="max-w-5xl mx-auto space-y-8">
-        {/* Navigation Breadcrumb */}
+      <div className="max-w-4xl mx-auto space-y-8 text-right">
+        {/* Top Navigation */}
         <div className="flex items-center justify-between">
           <Link
             to="/"
             className="inline-flex items-center gap-2 text-xs font-black text-blue-600 dark:text-blue-400 hover:underline bg-white dark:bg-slate-900 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs"
           >
             <ArrowRight size={14} />
-            <span>بازگشت به صفحه اصلی سامانه</span>
+            <span>بازگشت به صفحه اصلی</span>
           </Link>
 
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
             <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
-              آماده نصب مستقیم (WebAPK / PWA / TWA)
+              نسخه رسمی تلفن همراه
             </span>
           </div>
         </div>
@@ -79,60 +70,91 @@ bubblewrap build`;
         {/* Hero Section */}
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-blue-700 via-indigo-700 to-slate-900 text-white p-6 sm:p-10 shadow-2xl">
           <div className="relative z-10 max-w-2xl space-y-4">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-white backdrop-blur-md text-xs font-black border border-white/20">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 text-white backdrop-blur-md text-xs font-black border border-white/20">
               <Smartphone size={14} />
-              <span>نسخه رسمی تلفن همراه — دستیار مهاجر</span>
+              <span>نصب مستقیم اپلیکیشن — بدون نیاز به بازار یا فیلترشکن</span>
             </div>
+
             <h1 className="text-2xl sm:text-4xl font-black leading-tight tracking-tight">
-              دانلود و نصب اپلیکیشن اندروید (APK / TWA) و آیفون
+              دانلود و نصب اپلیکیشن دستیار مهاجر (اندروید و آیفون)
             </h1>
-            <p className="text-sm sm:text-base text-blue-100 leading-relaxed">
-              شما می‌توانید «دستیار مهاجر» را به صورت مستقیم و بدون نیاز به نصب از گوگل‌پلی یا کافه بازار روی گوشی خود نصب فرمایید.
-              سرعت فوق‌العاده بالا، بدون قطعی، بدون تبلیغات و کاملاً مستقل!
+
+            <p className="text-xs sm:text-sm text-blue-100 leading-relaxed">
+              شما می‌توانید سامانه جامع دستیار مهاجر را با یک کلیک و بدون نیاز به دانلود بسته‌های سنگین، مستقیماً روی صفحه گوشی خود نصب کنید.
+              پرسرعت، بدون تبلیغات و همیشه در دسترس شما!
             </p>
 
-            {/* Quick Action Button */}
+            {/* Quick Action Buttons */}
             <div className="pt-3 flex flex-wrap items-center gap-3">
               {isInstalled ? (
-                <div className="px-5 py-3 rounded-2xl bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-sm font-bold flex items-center gap-2">
+                <div className="px-5 py-3.5 rounded-2xl bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-xs sm:text-sm font-bold flex items-center gap-2">
                   <CheckCircle2 size={18} />
-                  <span>اپلیکیشن هم‌اکنون روی دستگاه شما نصب است.</span>
+                  <span>اپلیکیشن هم‌اکنون روی دستگاه شما نصب و فعال است.</span>
                 </div>
               ) : isInstallable ? (
                 <button
                   type="button"
                   onClick={() => install()}
-                  className="px-6 py-3.5 rounded-2xl bg-white text-blue-700 hover:bg-blue-50 font-black text-sm shadow-xl transition-all flex items-center gap-2 transform active:scale-95"
+                  className="px-6 py-3.5 rounded-2xl bg-white text-blue-700 hover:bg-blue-50 font-black text-xs sm:text-sm shadow-xl transition-all flex items-center gap-2 transform active:scale-95"
                 >
                   <Download size={18} />
-                  <span>نصب فوری و خودکار (WebAPK)</span>
+                  <span>نصب فوری و خودکار روی گوشی</span>
                 </button>
               ) : isIOS ? (
                 <div className="px-5 py-3 rounded-2xl bg-white/15 backdrop-blur-md text-white border border-white/20 text-xs font-bold flex items-center gap-2">
                   <Share2 size={16} />
-                  <span>در مرورگر Safari دکمه Share و سپس «Add to Home Screen» را بزنید.</span>
+                  <span>در مرورگر Safari دکمه اشتراک‌گذاری و سپس «Add to Home Screen» را لمس فرمایید.</span>
                 </div>
               ) : (
                 <div className="px-5 py-3 rounded-2xl bg-white/10 backdrop-blur-md text-blue-100 border border-white/20 text-xs font-bold flex items-center gap-2">
-                  <Info size={16} />
-                  <span>برای نصب، از طریق مرورگر کروم یا سامسونگ روی گوشی این صفحه را باز فرمایید.</span>
+                  <Sparkles size={16} />
+                  <span>از طریق مرورگر کروم یا سامسونگ روی گوشی وارد شوید تا دکمه نصب خودکار فعال گردد.</span>
                 </div>
               )}
 
-              <a
-                href={`https://www.pwabuilder.com/reportcard?site=${encodeURIComponent(appUrl)}`}
-                target="_blank"
-                rel="noreferrer"
-                className="px-5 py-3.5 rounded-2xl bg-white/15 hover:bg-white/25 text-white border border-white/20 font-bold text-xs transition-all flex items-center gap-2"
-              >
-                <span>تولید آنلاین APK با PWABuilder</span>
-                <ExternalLink size={14} />
-              </a>
+              {/* Direct APK Link if configured by Admin */}
+              {downloadConfig.showDirectApkButton && downloadConfig.directApkUrl && (
+                <a
+                  href={downloadConfig.directApkUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-5 py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs sm:text-sm transition-all flex items-center gap-2 shadow-lg"
+                >
+                  <Download size={16} />
+                  <span>دانلود مستقیم فایل APK ({downloadConfig.fileSizeMb}MB)</span>
+                </a>
+              )}
+
+              {/* Cafe Bazaar Link if configured */}
+              {downloadConfig.bazaarUrl && (
+                <a
+                  href={downloadConfig.bazaarUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-4 py-3 rounded-2xl bg-white/15 hover:bg-white/25 text-white font-bold text-xs border border-white/20 transition-all flex items-center gap-1.5"
+                >
+                  <span>کافه بازار</span>
+                  <ExternalLink size={13} />
+                </a>
+              )}
+
+              {/* Myket Link if configured */}
+              {downloadConfig.myketUrl && (
+                <a
+                  href={downloadConfig.myketUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-4 py-3 rounded-2xl bg-white/15 hover:bg-white/25 text-white font-bold text-xs border border-white/20 transition-all flex items-center gap-1.5"
+                >
+                  <span>مایکت</span>
+                  <ExternalLink size={13} />
+                </a>
+              )}
             </div>
           </div>
 
           <div className="absolute -left-12 -bottom-16 opacity-15 pointer-events-none hidden md:block">
-            <Smartphone size={320} />
+            <Smartphone size={300} />
           </div>
         </div>
 
@@ -144,7 +166,7 @@ bubblewrap build`;
             </div>
             <h3 className="text-sm font-black">حجم بسیار کم (کمتر از ۳ مگابایت)</h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-              برخلاف برنامه‌های سنگین که فضای زیادی اشغال می‌کنند، این اپلیکیشن سبک‌ترین حافظه را از گوشی مصرف می‌کند.
+              حافظه گوشی شما را اشغال نمی‌کند و روی هر مدل گوشی قدیمی یا جدید با سرعت بالا باز می‌شود.
             </p>
           </div>
 
@@ -152,305 +174,135 @@ bubblewrap build`;
             <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950 text-emerald-600 flex items-center justify-center">
               <RefreshCw size={20} />
             </div>
-            <h3 className="text-sm font-black">آپدیت خودکار بدون دانلود مجدد</h3>
+            <h3 className="text-sm font-black">آپدیت خودکار بدون دانلود فایل جدید</h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-              هر تغییری در بخشنامه‌ها، سامانه نوبت‌دهی و اخبار فوراً و بدون نیاز به دانلود فایل آپدیت جدید روی گوشی اعمال می‌شود.
+              هر تغییری در سامانه‌ها، نوبت‌دهی و اخبار فوراً و خودکار روی گوشی شما به‌روز می‌شود.
             </p>
           </div>
 
           <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-2">
             <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-950 text-purple-600 flex items-center justify-center">
-              <ShieldCheck size={20} />
+              <WifiOff size={20} />
             </div>
-            <h3 className="text-sm font-black">سازگار با اندروید و iOS</h3>
+            <h3 className="text-sm font-black">دسترسی آفلاین به اطلاعات</h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-              به راحتی روی تمام گوشی‌های سامسونگ، شیائومی، هواوی، نوکیا و تمامی مدل‌های آیفون و آیپد کار می‌کند.
+              آدرس شعب، شماره تماس سفارت‌ها و راهنماها حتی در صورت قطعی اینترنت در دسترستان خواهد بود.
             </p>
           </div>
         </div>
 
-        {/* Tab Selection */}
-        <div className="flex border-b border-slate-200 dark:border-slate-800 gap-2 overflow-x-auto pb-1">
-          <button
-            onClick={() => setActiveTab('pwa')}
-            className={`px-4 py-2.5 text-xs font-black rounded-xl transition-all flex items-center gap-2 whitespace-nowrap ${
-              activeTab === 'pwa'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-            }`}
-          >
-            <Smartphone size={15} />
-            <span>نصب مستقیم موبایل (WebAPK / PWA)</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('twa')}
-            className={`px-4 py-2.5 text-xs font-black rounded-xl transition-all flex items-center gap-2 whitespace-nowrap ${
-              activeTab === 'twa'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-            }`}
-          >
-            <Layers size={15} />
-            <span>خروجی فایل APK با TWA</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('bubblewrap')}
-            className={`px-4 py-2.5 text-xs font-black rounded-xl transition-all flex items-center gap-2 whitespace-nowrap ${
-              activeTab === 'bubblewrap'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-            }`}
-          >
-            <Terminal size={15} />
-            <span>کامندلاین رسمی گوگل (Bubblewrap)</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('assetlinks')}
-            className={`px-4 py-2.5 text-xs font-black rounded-xl transition-all flex items-center gap-2 whitespace-nowrap ${
-              activeTab === 'assetlinks'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-            }`}
-          >
-            <FileCode2 size={15} />
-            <span>تنظیمات AssetLinks & Manifest</span>
-          </button>
+        {/* Step-by-Step Installation Guides */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">
+              راهنمای گام‌به‌گام نصب در تلفن همراه
+            </h2>
+            <span className="text-xs text-slate-400 font-bold">بسیار ساده در ۴ مرحله</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Android Guide */}
+            <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
+              <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-black text-sm border-b border-slate-100 dark:border-slate-800 pb-3">
+                <Smartphone size={18} />
+                <span>روش نصب در گوشی‌های اندروید (Chrome یا Samsung)</span>
+              </div>
+
+              <ul className="space-y-3.5 text-xs text-slate-700 dark:text-slate-300">
+                <li className="flex items-start gap-3">
+                  <span className="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5 shadow-xs">۱</span>
+                  <span className="leading-relaxed">آدرس سامانه را در مرورگر <strong>Google Chrome</strong> باز فرمایید.</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5 shadow-xs">۲</span>
+                  <span className="leading-relaxed">روی علامت سه‌نقطه <span className="font-mono bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-[11px]">⋮</span> در بالای صفحه مرورگر بزنید.</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5 shadow-xs">۳</span>
+                  <span className="leading-relaxed">گزینه <strong>«افزودن به صفحه اصلی»</strong> یا <strong>«Install App / نصب برنامه»</strong> را لمس کنید.</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5 shadow-xs">۴</span>
+                  <span className="leading-relaxed">تایید فرمایید؛ آیکون برنامه سریعاً به صفحه اصلی برنامه‌های گوشی شما افزوده می‌شود.</span>
+                </li>
+              </ul>
+
+              {isInstallable && (
+                <button
+                  onClick={() => install()}
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 shadow-md"
+                >
+                  <Download size={15} />
+                  <span>کلیک کنید تا خودکار نصب شود</span>
+                </button>
+              )}
+            </div>
+
+            {/* iOS Guide */}
+            <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
+              <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-black text-sm border-b border-slate-100 dark:border-slate-800 pb-3">
+                <Smartphone size={18} />
+                <span>روش نصب در گوشی‌های آیفون و آیپد (Safari)</span>
+              </div>
+
+              <ul className="space-y-3.5 text-xs text-slate-700 dark:text-slate-300">
+                <li className="flex items-start gap-3">
+                  <span className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5 shadow-xs">۱</span>
+                  <span className="leading-relaxed">سامانه را حتماً در مرورگر پیش‌فرض آیفون یعنی <strong>Safari</strong> باز کنید.</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5 shadow-xs">۲</span>
+                  <span className="leading-relaxed">در نوار پایین صفحه روی آیکون <strong>اشتراک‌گذاری (Share)</strong> کلیک کنید.</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5 shadow-xs">۳</span>
+                  <span className="leading-relaxed">در منوی بازشده، به پایین اسکرول کرده و گزینه <strong>«Add to Home Screen»</strong> را لمس کنید.</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5 shadow-xs">۴</span>
+                  <span className="leading-relaxed">در گوشه بالای راست دکمه <strong>Add</strong> را بزنید. دستیار مهاجر مثل یک اپ بومی باز خواهد شد.</span>
+                </li>
+              </ul>
+            </div>
+          </div>
         </div>
 
-        {/* Tab 1: PWA Direct Mobile Install */}
-        {activeTab === 'pwa' && (
-          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border border-slate-200 dark:border-slate-800 space-y-6">
-            <div>
-              <h2 className="text-lg font-black text-slate-900 dark:text-white">
-                راهنمای نصب سریع دستیار مهاجر بر روی تلفن همراه
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                توسط این روش، مرورگر شما مستقیماً یک فایل WebAPK ساخته و برنامه را همانند برنامه‌های دانلودی با آیکون در صفحه برنامه‌های گوشی قرار می‌دهد.
-              </p>
-            </div>
+        {/* FAQs */}
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+          <h2 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
+            <HelpCircle size={18} className="text-blue-600 dark:text-blue-400" />
+            <span>سوالات متداول کاربران درباره نصب اپلیکیشن</span>
+          </h2>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Android Guide */}
-              <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-4">
-                <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-black text-sm">
-                  <Smartphone size={18} />
-                  <span>مراحل در گوشی‌های اندروید (Chrome یا مرورگر سامسونگ)</span>
-                </div>
-                <ul className="space-y-3 text-xs text-slate-700 dark:text-slate-300">
-                  <li className="flex items-start gap-2.5">
-                    <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">۱</span>
-                    <span>همین صفحه را در مرورگر <strong>Google Chrome</strong> در گوشی باز فرمایید.</span>
-                  </li>
-                  <li className="flex items-start gap-2.5">
-                    <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">۲</span>
-                    <span>روی دکمه سه‌نقطه <span className="font-mono bg-slate-200 dark:bg-slate-700 px-1 py-0.5 rounded">⋮</span> در گوشه بالا سمت چپ مرورگر بزنید.</span>
-                  </li>
-                  <li className="flex items-start gap-2.5">
-                    <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">۳</span>
-                    <span>گزینه <strong>«افزودن به صفحه اصلی»</strong> یا <strong>«نصب برنامه (Install App)»</strong> را لمس کنید.</span>
-                  </li>
-                  <li className="flex items-start gap-2.5">
-                    <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">۴</span>
-                    <span>گزینه «نصب (Install)» را تایید فرمایید. آیکون دستیار مهاجر بلافاصله به منوی اصلی گوشی شما اضافه خواهد شد.</span>
-                  </li>
-                </ul>
-
-                {isInstallable && (
-                  <button
-                    onClick={() => install()}
-                    className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20"
-                  >
-                    <Download size={15} />
-                    <span>نصب خودکار برای مرورگر فعلی شما</span>
-                  </button>
-                )}
-              </div>
-
-              {/* iOS Guide */}
-              <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-4">
-                <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-black text-sm">
-                  <Smartphone size={18} />
-                  <span>مراحل در گوشی‌های آیفون و آیپد (Safari)</span>
-                </div>
-                <ul className="space-y-3 text-xs text-slate-700 dark:text-slate-300">
-                  <li className="flex items-start gap-2.5">
-                    <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">۱</span>
-                    <span>آدرس سامانه را در مرورگر پیش‌فرض آیفون یعنی <strong>Safari</strong> باز کنید.</span>
-                  </li>
-                  <li className="flex items-start gap-2.5">
-                    <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">۲</span>
-                    <span>در نوار پایین مرورگر روی آیکون <strong>Share</strong> (مربع با فلش رو به بالا) کلیک فرمایید.</span>
-                  </li>
-                  <li className="flex items-start gap-2.5">
-                    <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">۳</span>
-                    <span>در لیست گزینه‌ها گزینه <strong>«Add to Home Screen»</strong> را لمس کنید.</span>
-                  </li>
-                  <li className="flex items-start gap-2.5">
-                    <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">۴</span>
-                    <span>در بالای صفحه راست گزینه <strong>Add</strong> را بزنید. دستیار مهاجر تمام‌صفحه و بدون نوار آدرس باز خواهد شد.</span>
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Tab 2: TWA (Trusted Web Activity) APK generation */}
-        {activeTab === 'twa' && (
-          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border border-slate-200 dark:border-slate-800 space-y-6">
-            <div>
-              <h2 className="text-lg font-black text-slate-900 dark:text-white">
-                تولید فایل رسمی APK با استاندارد Google TWA
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                استاندارد TWA (Trusted Web Activity) تکنولوژی رسمی گوگل است که به شما امکان می‌دهد این وب‌اپلیکیشن را تبدیل به یک فایل APK کامل و امضاشده برای انتشار در بازار، مایکت و گوگل‌پلی نمایید.
-              </p>
-            </div>
-
-            <div className="p-5 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 space-y-3">
-              <div className="flex items-center gap-2 text-blue-700 dark:text-blue-300 font-black text-xs">
-                <CheckCircle2 size={16} />
-                <span>کلیه پیش‌نیازهای TWA در این سامانه با موفقیت پیاده‌سازی شده است:</span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-slate-700 dark:text-slate-300">
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                  <span>فایل <code className="font-mono bg-blue-100 dark:bg-blue-900 px-1 rounded">manifest.json</code> استاندارد و کامل</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                  <span>آیکون‌های Maskable و سایزهای ۱۹۲ و ۵۱۲ پیکسلی</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                  <span>سرویس‌ورکر (Workbox) فعال برای کش و آفلاین</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                  <span>پرونده <code className="font-mono bg-blue-100 dark:bg-blue-900 px-1 rounded">.well-known/assetlinks.json</code> جهت حذف نوار مرورگر</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Step-by-step PWABuilder generator */}
-            <div className="p-6 rounded-2xl bg-gradient-to-r from-slate-900 to-indigo-950 text-white space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-base font-black">روش ۱: تولید آنلاین APK با PWABuilder (پیشنهادی)</h3>
-                  <p className="text-xs text-slate-300 mt-1">
-                    سرویس رسمی مایکروسافت بدون نیاز به نصب نرم‌افزار، فایل APK نهایی را ظرف ۱ دقیقه آماده دانلود می‌کند.
-                  </p>
-                </div>
-                <a
-                  href={`https://www.pwabuilder.com/reportcard?site=${encodeURIComponent(appUrl)}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 shrink-0 shadow-lg shadow-blue-600/30"
+          <div className="space-y-3 pt-2">
+            {faqs.map((faq, index) => {
+              const isOpen = openFaq === index;
+              return (
+                <div
+                  key={index}
+                  className="rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden"
                 >
-                  <span>ورود به سامانه ساخت APK</span>
-                  <ExternalLink size={14} />
-                </a>
-              </div>
-
-              <div className="text-xs text-slate-300 space-y-2 border-t border-slate-800 pt-4">
-                <p><strong>مراحل دانلود:</strong></p>
-                <ol className="list-decimal list-inside space-y-1">
-                  <li>روی دکمه بالا کلیک کنید (آدرس سامانه شما به طور خودکار آنالیز خواهد شد).</li>
-                  <li>امتیاز سازگاری PWA نمایش داده می‌شود (امتیاز ۱۰۰٪).</li>
-                  <li>روی دکمه <strong>«Package For Stores»</strong> و سپس <strong>«Android (Google Play / APK)»</strong> کلیک کنید.</li>
-                  <li>فایل زیپ شامل <code className="text-amber-300 font-mono">app-release-unsigned.apk</code> یا فایل پکیج امضاشده را دانلود فرمایید.</li>
-                </ol>
-              </div>
-            </div>
+                  <button
+                    type="button"
+                    onClick={() => setOpenFaq(isOpen ? null : index)}
+                    className="w-full p-4 text-right flex items-center justify-between gap-3 text-xs font-black text-slate-800 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                  >
+                    <span>{faq.q}</span>
+                    <ChevronDown
+                      size={16}
+                      className={`text-slate-400 transition-transform ${isOpen ? 'rotate-180 text-blue-600' : ''}`}
+                    />
+                  </button>
+                  {isOpen && (
+                    <div className="p-4 pt-0 text-xs text-slate-600 dark:text-slate-400 leading-relaxed border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+                      {faq.a}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
-        )}
-
-        {/* Tab 3: Bubblewrap CLI */}
-        {activeTab === 'bubblewrap' && (
-          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border border-slate-200 dark:border-slate-800 space-y-6">
-            <div>
-              <h2 className="text-lg font-black text-slate-900 dark:text-white">
-                تولید پروژه TWA با ابزار رسمی گوگل (Bubblewrap CLI)
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                اگر برنامه‌نویس هستید یا می‌خواهید سورس اندروید را در Android Studio باز کرده و امضای اختصاصی (Keystore) بزنید:
-              </p>
-            </div>
-
-            <div className="relative">
-              <pre className="p-4 rounded-2xl bg-slate-950 text-emerald-400 font-mono text-xs overflow-x-auto leading-relaxed dir-ltr text-left">
-                {bubblewrapCommands}
-              </pre>
-              <button
-                onClick={() => copyToClipboard(bubblewrapCommands, 'bubblewrap')}
-                className="absolute top-3 right-3 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center gap-1.5 transition-all"
-              >
-                {copiedSection === 'bubblewrap' ? <CheckCircle2 size={13} className="text-emerald-400" /> : <Copy size={13} />}
-                <span>{copiedSection === 'bubblewrap' ? 'کپی شد' : 'کپی دستورات'}</span>
-              </button>
-            </div>
-
-            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 text-xs text-slate-600 dark:text-slate-300 space-y-2">
-              <h4 className="font-black text-slate-900 dark:text-white">مشخصات پکیج آماده:</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 font-mono">
-                <div>Package Name: <span className="text-blue-600 dark:text-blue-400 font-bold">com.mohajer.assistant</span></div>
-                <div>Start URL: <span className="text-blue-600 dark:text-blue-400 font-bold">{appUrl}/</span></div>
-                <div>Display Mode: <span className="text-blue-600 dark:text-blue-400 font-bold">standalone (TWA Fullscreen)</span></div>
-                <div>Icon: <span className="text-blue-600 dark:text-blue-400 font-bold">{appUrl}/pwa-512x512.png</span></div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Tab 4: AssetLinks.json */}
-        {activeTab === 'assetlinks' && (
-          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border border-slate-200 dark:border-slate-800 space-y-6">
-            <div>
-              <h2 className="text-lg font-black text-slate-900 dark:text-white">
-                پیکربندی تاییدیه دیجیتالی گوگل (Digital Asset Links)
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                برای این‌که مرورگر کروم هنگام باز شدن فایل APK نوار بالای آدرس (URL Bar) را کاملاً محو کرده و اپلیکیشن دقیقاً مثل یک اپ بومی نیتیو باز شود، این فایل در مسیر <code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded">/.well-known/assetlinks.json</code> قرار گرفته است.
-              </p>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <a
-                href={`${appUrl}/.well-known/assetlinks.json`}
-                target="_blank"
-                rel="noreferrer"
-                className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
-              >
-                <span>مشاهده فایل فعال روی سرور</span>
-                <ExternalLink size={13} />
-              </a>
-
-              <a
-                href={`${appUrl}/manifest.json`}
-                target="_blank"
-                rel="noreferrer"
-                className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
-              >
-                <span>مشاهده manifest.json</span>
-                <ExternalLink size={13} />
-              </a>
-            </div>
-
-            <div className="relative">
-              <pre className="p-4 rounded-2xl bg-slate-950 text-blue-300 font-mono text-xs overflow-x-auto leading-relaxed dir-ltr text-left">
-                {assetLinksJson}
-              </pre>
-              <button
-                onClick={() => copyToClipboard(assetLinksJson, 'assetlinks')}
-                className="absolute top-3 right-3 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center gap-1.5 transition-all"
-              >
-                {copiedSection === 'assetlinks' ? <CheckCircle2 size={13} className="text-emerald-400" /> : <Copy size={13} />}
-                <span>{copiedSection === 'assetlinks' ? 'کپی شد' : 'کپی JSON'}</span>
-              </button>
-            </div>
-          </div>
-        )}
-
+        </div>
       </div>
     </div>
   );

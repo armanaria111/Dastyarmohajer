@@ -1037,10 +1037,10 @@ export default function LandingPage() {
                       </span>
                     </div>
                     <h4 className="text-base font-black text-slate-900 dark:text-white mt-1">
-                      اپلیکیشن موبایل دستیار مهاجر (نسخه مستقیم APK و TWA)
+                      اپلیکیشن تلفن همراه دستیار مهاجر (اندروید و آیفون)
                     </h4>
                     <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed mt-1">
-                      نصب مستقیم روی گوشی اندروید و iOS، آیکون مستقل روی صفحه گوشی، حجم کمتر از ۳ مگابایت، دسترسی آفلاین و اعلان‌های هوشمند.
+                      نصب مستقیم روی گوشی‌های اندروید و iOS، آیکون اختصاصی در صفحه برنامه‌ها، حجم بسیار کم، دسترسی آفلاین و بدون قطعی.
                     </p>
                   </div>
                 </div>
@@ -1050,7 +1050,7 @@ export default function LandingPage() {
                     className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 shadow-md shadow-blue-600/30"
                   >
                     <Download size={15} />
-                    <span>دانلود و راهنمای نصب APK</span>
+                    <span>دانلود و نصب اپلیکیشن</span>
                   </Link>
                 </div>
               </div>

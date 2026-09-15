@@ -27,6 +27,7 @@ import StaffManagement from "./pages/StaffManagement";
 import EducationPortal from "./pages/EducationPortal";
 import SmartInquiries from "./pages/SmartInquiries";
 import MobileAppDownload from "./pages/MobileAppDownload";
+import AdminAppBuilder from "./pages/AdminAppBuilder";
 import { OfflineIndicator } from "./components/OfflineIndicator";
 
 export default function App() {
@@ -165,7 +166,7 @@ export default function App() {
           <Route path="broadcast" element={<Broadcast />} />
           <Route path="bots" element={<BotsManagement />} />
           <Route path="simulator" element={<BotSimulator />} />
-          <Route path="mobile-app" element={<MobileAppDownload />} />
+          <Route path="mobile-app" element={<AdminAppBuilder />} />
           <Route path="staff" element={<StaffManagement />} />
         </Route>
 

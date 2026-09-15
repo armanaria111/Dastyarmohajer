@@ -369,9 +369,15 @@ export default function BotsManagement() {
                   {/* Card Top */}
                   <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-700 pb-3">
                     <div className="flex items-center gap-3">
-                      <div className={`w-9 h-9 rounded-xl bg-gradient-to-tr ${platform.color} text-white flex items-center justify-center font-bold text-sm shadow-xs`}>
-                        {platform.name.charAt(0)}
-                      </div>
+                      <SocialIconDisplay
+                        customIconUrl={lock.customIconUrl}
+                        iconType={platform.id}
+                        platform={platform.name}
+                        fallbackGradient={platform.color}
+                        className="w-10 h-10 rounded-xl shadow-xs"
+                        iconSize={20}
+                        alt={platform.persianName}
+                      />
                       <div>
                         <h3 className="font-bold text-gray-900 dark:text-white text-sm">
                           {platform.persianName}
@@ -454,6 +460,15 @@ export default function BotsManagement() {
                         className="w-full px-3 py-2 rounded-xl bg-gray-50 dark:bg-gray-700/60 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-xs focus:outline-none focus:border-blue-500"
                       />
                     </div>
+
+                    {/* Custom Channel Icon/Logo Upload */}
+                    <SocialIconUploader
+                      label="آیکون یا لوگوی اختصاصی کانال"
+                      customIconUrl={lock.customIconUrl}
+                      iconType={platform.id}
+                      platform={platform.name}
+                      onCustomIconChange={(url) => updateChannelLock(platform.id, { customIconUrl: url })}
+                    />
                   </div>
 
                   {/* Card bottom */}
@@ -523,9 +538,14 @@ export default function BotsManagement() {
                   {/* Card Header */}
                   <div className="p-5 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-xl bg-gradient-to-tr ${platform.color} text-white flex items-center justify-center font-bold text-lg shadow-sm`}>
-                        {platform.name.charAt(0)}
-                      </div>
+                      <SocialIconDisplay
+                        iconType={platform.id}
+                        platform={platform.name}
+                        fallbackGradient={platform.color}
+                        className="w-10 h-10 rounded-xl shadow-xs"
+                        iconSize={22}
+                        alt={platform.persianName}
+                      />
                       <div>
                         <h3 className="font-bold text-gray-900 dark:text-white text-base">{platform.persianName}</h3>
                         <p className="text-xs text-gray-500 dark:text-gray-400">{platform.description}</p>

@@ -11,6 +11,7 @@ import {
   Edit2,
   Bot,
   ShieldAlert,
+  ShieldCheck,
   Calendar,
   Phone,
   Sparkles,
@@ -23,6 +24,14 @@ import {
 import { collection, onSnapshot, setDoc, doc, deleteDoc, updateDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { exportToCSV } from "../utils/exportUtils";
+
+const safeSetItem = (key: string, value: string) => {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // fallback
+  }
+};
 
 interface MonitoredDocument {
   id: string;
@@ -296,11 +305,13 @@ export default function ExpiryReminders() {
     e.preventDefault();
     if (!editingDocItem) return;
 
-    setDocs((prev) => prev.map((d) => (d.id === editingDocItem.id ? editingDocItem : d)));
+    const updated = docs.map((d) => (d.id === editingDocItem.id ? editingDocItem : d));
+    setDocs(updated);
+    safeSetItem("admin_monitored_documents", JSON.stringify(updated));
     setIsEditModalOpen(false);
 
     try {
-      await updateDoc(doc(db, "monitored_documents", editingDocItem.id), { ...editingDocItem });
+      await setDoc(doc(db, "monitored_documents", editingDocItem.id), editingDocItem, { merge: true });
     } catch {
       // fallback
     }
@@ -469,8 +480,102 @@ export default function ExpiryReminders() {
         </div>
       </div>
 
-      {/* Main Table */}
-      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-xs">
+      {/* Mobile & Tablet Card Layout (Visible on small/medium screens) */}
+      <div className="block lg:hidden space-y-3">
+        {filteredDocs.length === 0 ? (
+          <div className="p-8 text-center text-gray-400 bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-slate-700">
+            موردی مطابق با فیلترها یافت نشد.
+          </div>
+        ) : (
+          filteredDocs.map((docItem) => {
+            const isCritical = docItem.daysRemaining > 0 && docItem.daysRemaining <= 30;
+            const isExpired = docItem.daysRemaining <= 0;
+
+            return (
+              <div
+                key={`card_${docItem.id}`}
+                className="p-4 rounded-2xl bg-white dark:bg-gray-800 border border-slate-200 dark:border-slate-700 shadow-xs space-y-3"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="font-black text-sm text-gray-900 dark:text-white flex items-center gap-1.5">
+                      <ShieldCheck size={16} className="text-blue-600" />
+                      <span>{docItem.ownerName}</span>
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                      {docItem.docType} • <span className="font-mono">{docItem.docNumber}</span>
+                    </div>
+                  </div>
+
+                  <span className="px-2.5 py-1 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 text-xs font-black inline-flex items-center gap-1">
+                    <Bot size={13} />
+                    <span>{getPlatformName(docItem.botPlatform)}</span>
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-slate-100 dark:border-slate-700/60">
+                  <div className="text-gray-600 dark:text-gray-300">
+                    <span className="text-gray-400 block text-[10px]">شماره تماس:</span>
+                    <span className="font-mono font-bold" dir="ltr">{docItem.phone}</span>
+                  </div>
+                  <div className="text-gray-600 dark:text-gray-300">
+                    <span className="text-gray-400 block text-[10px]">تاریخ انقضا:</span>
+                    <span className="font-mono font-bold">{docItem.expiryDate}</span>
+                  </div>
+                </div>
+
+                <div>
+                  {isExpired ? (
+                    <span className="px-2.5 py-1 rounded-md bg-rose-100 dark:bg-rose-950 text-rose-600 dark:text-rose-400 text-[11px] font-black flex items-center gap-1 w-fit">
+                      <ShieldAlert size={12} />
+                      <span>منقضی شده ({Math.abs(docItem.daysRemaining)} روز گذشته)</span>
+                    </span>
+                  ) : isCritical ? (
+                    <span className="px-2.5 py-1 rounded-md bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 text-[11px] font-black flex items-center gap-1 w-fit">
+                      <AlertTriangle size={12} />
+                      <span>هشدار: فقط {docItem.daysRemaining} روز تا انقضا باقیست</span>
+                    </span>
+                  ) : (
+                    <span className="px-2.5 py-1 rounded-md bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-[11px] font-black flex items-center gap-1 w-fit">
+                      <span>{docItem.daysRemaining} روز معتبر است</span>
+                    </span>
+                  )}
+                </div>
+
+                <div className="pt-2 border-t border-slate-100 dark:border-slate-700 flex items-center gap-2">
+                  <button
+                    onClick={() => handleOpenEdit(docItem)}
+                    className="flex-1 py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all"
+                  >
+                    <Edit2 size={13} />
+                    <span>ویرایش پرونده مدرک</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleSendBotNotification(docItem)}
+                    disabled={sendingId === docItem.id}
+                    className="py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-gray-800 dark:text-gray-200 font-bold text-xs flex items-center justify-center gap-1 transition-colors"
+                  >
+                    <Send size={13} />
+                    <span>ارسال هشدار</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleDelete(docItem.id)}
+                    className="p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-xl"
+                    title="حذف رکورد"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Main Table (Visible on Desktop) */}
+      <div className="hidden lg:block bg-white dark:bg-gray-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
           <table className="w-full text-right text-xs">
             <thead className="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-700 text-gray-500 dark:text-gray-400 font-black">
@@ -481,7 +586,7 @@ export default function ExpiryReminders() {
                 <th className="p-3.5">تاریخ انقضا و باقیمانده</th>
                 <th className="p-3.5">وضعیت اخطار</th>
                 <th className="p-3.5 text-center">ارسال در ربات</th>
-                <th className="p-3.5 text-center">عملیات (ویرایش / حذف)</th>
+                <th className="p-3.5 text-center">عملیات مدیریت</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-gray-700 dark:text-gray-200 font-medium">
@@ -497,7 +602,12 @@ export default function ExpiryReminders() {
                   const isExpired = docItem.daysRemaining <= 0;
 
                   return (
-                    <tr key={docItem.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-750 transition-colors">
+                    <tr
+                      key={docItem.id}
+                      onDoubleClick={() => handleOpenEdit(docItem)}
+                      className="hover:bg-slate-50/70 dark:hover:bg-slate-750 transition-colors cursor-pointer"
+                      title="برای ویرایش سریع دوبار کلیک کنید"
+                    >
                       <td className="p-3.5 whitespace-nowrap">
                         <div className="font-black text-sm text-gray-900 dark:text-white">{docItem.ownerName}</div>
                         <div className="text-gray-400 font-mono text-[11px] mt-0.5 flex items-center gap-1">
@@ -551,7 +661,10 @@ export default function ExpiryReminders() {
                       </td>
                       <td className="p-3.5 text-center whitespace-nowrap">
                         <button
-                          onClick={() => handleSendBotNotification(docItem)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSendBotNotification(docItem);
+                          }}
                           disabled={sendingId === docItem.id}
                           className="px-3 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-800 text-blue-600 dark:text-blue-400 font-black text-xs inline-flex items-center gap-1.5 transition-all border border-blue-200 dark:border-blue-700 disabled:opacity-50"
                         >
@@ -564,20 +677,27 @@ export default function ExpiryReminders() {
                         </button>
                       </td>
                       <td className="p-3.5 text-center whitespace-nowrap">
-                        <div className="flex items-center justify-center gap-1.5">
+                        <div className="flex items-center justify-center gap-2">
                           <button
-                            onClick={() => handleOpenEdit(docItem)}
-                            className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenEdit(docItem);
+                            }}
+                            className="px-3 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-900/40 hover:bg-blue-100 dark:hover:bg-blue-800 text-blue-700 dark:text-blue-300 font-black text-xs inline-flex items-center gap-1.5 transition-all border border-blue-200 dark:border-blue-700 shadow-xs"
                             title="ویرایش اطلاعات مدرک"
                           >
-                            <Edit2 size={16} />
+                            <Edit2 size={13} />
+                            <span>ویرایش مدرک</span>
                           </button>
                           <button
-                            onClick={() => handleDelete(docItem.id)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDelete(docItem.id);
+                            }}
                             className="p-1.5 text-gray-400 hover:text-rose-600 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                             title="حذف رکورد"
                           >
-                            <Trash2 size={16} />
+                            <Trash2 size={15} />
                           </button>
                         </div>
                       </td>

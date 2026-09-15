@@ -25,7 +25,8 @@ import {
   BotLinkItem,
   NewsChannelItem,
   getStoredAdminCredentials,
-  saveAdminCredentials
+  saveAdminCredentials,
+  DEFAULT_BOT_LINKS
 } from "../data/landingSettings";
 import { SocialIconUploader } from "../components/SocialIconUploader";
 
@@ -63,19 +64,38 @@ export default function LandingSettings() {
   };
 
   // Add new bot link
-  const addBotLink = () => {
+  const addBotLink = (preset?: Partial<BotLinkItem>) => {
     const newBot: BotLinkItem = {
-      id: "bot_" + Date.now(),
-      name: "ربات جدید",
-      persianName: "ربات جدید",
-      iconType: "telegram",
-      username: "@new_bot",
-      url: "https://t.me/",
-      description: "خدمات استعلام و نوبت‌دهی",
-      color: "from-blue-600 to-indigo-600",
-      isActive: true,
+      id: preset?.id || "bot_" + Date.now(),
+      name: preset?.name || "ربات جدید",
+      persianName: preset?.persianName || "ربات جدید",
+      iconType: preset?.iconType || "telegram",
+      username: preset?.username || "@new_bot",
+      url: preset?.url || "https://t.me/",
+      description: preset?.description || "خدمات استعلام و نوبت‌دهی",
+      color: preset?.color || "from-blue-600 to-indigo-600",
+      isActive: preset?.isActive !== undefined ? preset.isActive : true,
+      customIconUrl: preset?.customIconUrl,
     };
     setConfig({ ...config, botLinks: [...config.botLinks, newBot] });
+  };
+
+  // Restore all 9 official bots
+  const restoreAllOfficialBots = () => {
+    if (confirm("آیا تمایل دارید تمام ۹ ربات رسمی سامانه (تلگرام، بله، ایتا، روبیکا، سروش+، گپ، آی‌گپ، واتساپ و شاد) بارگذاری و فعال شوند؟")) {
+      // Merge with existing bots without duplicating IDs
+      const existingMap = new Map(config.botLinks.map((b) => [b.id, b]));
+      DEFAULT_BOT_LINKS.forEach((defBot) => {
+        if (!existingMap.has(defBot.id)) {
+          existingMap.set(defBot.id, { ...defBot });
+        }
+      });
+      const merged = Array.from(existingMap.values());
+      setConfig({ ...config, botLinks: merged });
+      saveLandingConfig({ ...config, botLinks: merged });
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    }
   };
 
   // Remove bot link
@@ -216,16 +236,54 @@ export default function LandingSettings() {
       {/* ========================================================= */}
       {activeTab === "bots" && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between p-4 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 text-xs text-blue-800 dark:text-blue-200">
-            <span>لینک‌های زیر مستقیماً بر روی کارت‌های لندینگ پیج اصلی نمایش داده می‌شوند. هر کاربری روی دکمه ورود کلیک کند، به این آدرس‌ها هدایت خواهد شد.</span>
-            <button
-              type="button"
-              onClick={addBotLink}
-              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1 shrink-0 mr-3"
-            >
-              <Plus size={14} />
-              <span>افزودن ربات جدید</span>
-            </button>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 text-xs text-blue-800 dark:text-blue-200">
+            <div>
+              <span className="font-bold">مدیریت لینک‌های دسترسی به ربات‌های سامانه (تعداد فعلی: {config.botLinks.length} ربات):</span>
+              <p className="text-[11px] text-blue-700 dark:text-blue-300 mt-0.5">
+                شامل تمام پیام‌رسان‌های ایرانی و بین‌المللی (تلگرام، بله، ایتا، روبیکا، سروش+، گپ، آی‌گپ، واتساپ و شاد). می‌توانید هر کدام را ویرایش، غیرفعال یا ربات دلخواه اضافه کنید.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0 flex-wrap">
+              <button
+                type="button"
+                onClick={restoreAllOfficialBots}
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs"
+                title="بارگذاری تمام ۹ ربات رسمی سامانه"
+              >
+                <Sparkles size={14} />
+                <span>همگام‌سازی تمام ۹ ربات رسمی</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => addBotLink()}
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1 shadow-xs"
+              >
+                <Plus size={14} />
+                <span>افزودن ربات سفارشی</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Add Presets if any are not in list */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
+            <span className="text-gray-500 dark:text-gray-400 font-bold whitespace-nowrap">افزودن سریع ربات:</span>
+            {DEFAULT_BOT_LINKS.filter((db) => !config.botLinks.some((b) => b.id === db.id)).map((missing) => (
+              <button
+                key={missing.id}
+                type="button"
+                onClick={() => addBotLink(missing)}
+                className="px-2.5 py-1 bg-white dark:bg-gray-800 border border-slate-200 dark:border-slate-700 hover:border-blue-500 rounded-lg text-[11px] font-bold text-gray-700 dark:text-gray-300 flex items-center gap-1 transition-colors whitespace-nowrap"
+              >
+                <Plus size={12} className="text-blue-500" />
+                <span>+ {missing.persianName}</span>
+              </button>
+            ))}
+            {DEFAULT_BOT_LINKS.filter((db) => !config.botLinks.some((b) => b.id === db.id)).length === 0 && (
+              <span className="text-[11px] text-emerald-600 font-bold flex items-center gap-1">
+                <CheckCircle2 size={13} />
+                <span>تمام ۹ پیام‌رسان رسمی در لیست بالا قرار دارند</span>
+              </span>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
