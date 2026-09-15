@@ -15,7 +15,10 @@ import {
   Lock,
   Megaphone,
   ExternalLink,
-  ShieldCheck
+  ShieldCheck,
+  Zap,
+  Globe,
+  Send
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import {
@@ -50,7 +53,7 @@ const PLATFORMS: BotPlatform[] = [
     badgeBg: "bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-800",
     badgeText: "text-blue-700 dark:text-blue-300",
     description: "محبوب‌ترین پیام‌رسان بین‌المللی برای ارتباط با مهاجرین خارج و داخل ایران",
-    guide: "۱. در تلگرام به @BotFather پیام دهید و /newbot بزنید.\n۲. توکن دریافتی را کپی کرده و در کادر زیر وارد کنید.\n۳. با متد setWebhook تلگرام، وب‌هوک این پنل را ثبت فرمایید.\n۴. جهت عضویت اجباری، ربات را ادمین کانال تلگرام خود کنید.",
+    guide: "۱. در تلگرام به @BotFather پیام دهید، دستور /newbot را بفرستید و نام و نام‌کاربری ربات را تعیین کنید.\n۲. توکن دریافتی (HTTP API Token) را کپی کرده و در کادر توکن وارد نمایید.\n۳. روی دکمه «⚡️ ثبت خودکار وب‌هوک در تلگرام» در پایین همین کادر کلیک فرمایید تا وب‌هوک فوراً توسط سرور ثبت شود.\n▫️ روش دستی: می‌توانید این لینک را در مرورگر اینترنت خود باز کنید:\nhttps://api.telegram.org/bot<TOKEN>/setWebhook?url=<WEBHOOK_URL>\n۴. جهت عضویت اجباری، ربات را ادمین کانال تلگرام خود کنید.",
     tokenLabel: "توکن ربات تلگرام (HTTP API Token)",
     tokenPlaceholder: "مثال: 789123456:AAFlk90XyZ123456...",
     defaultChannelPlaceholder: "@mohajer_news_official",
@@ -64,7 +67,7 @@ const PLATFORMS: BotPlatform[] = [
     badgeBg: "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800",
     badgeText: "text-emerald-700 dark:text-emerald-300",
     description: "پیام‌رسان بله با پشتیبانی از وب‌هوک و کیبوردهای اختصاصی",
-    guide: "۱. به بازوی @BotFather در پیام‌رسان بله پیام دهید.\n۲. دستور /newbot را ارسال کرده و نام و شناسه ربات را مشخص کنید.\n۳. توکن دریافتی را در کادر زیر وارد کنید.\n۴. آدرس وب‌هوک اختصاصی را کپی کرده و ست نمایید.",
+    guide: "۱. به بازوی @BotFather در پیام‌رسان بله پیام دهید.\n۲. دستور /newbot را ارسال کرده و نام و شناسه ربات را مشخص کنید.\n۳. توکن دریافتی را در کادر زیر وارد کنید.\n۴. روی دکمه «⚡️ ثبت خودکار وب‌هوک در بله» کلیک کنید یا آدرس وب‌هوک را کپی کرده و ست نمایید.",
     tokenLabel: "توکن ربات بله (Bot Token)",
     tokenPlaceholder: "مثال: 1234567890:AbCdEfGhIjKlMnOpQrStUvWxYz",
     defaultChannelPlaceholder: "@mohajer_consular",
@@ -149,6 +152,7 @@ export default function BotsManagement() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
+  const [settingWebhookId, setSettingWebhookId] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{ id: string; success: boolean; message: string } | null>(null);
   const [activeGuideId, setActiveGuideId] = useState<string | null>(null);
   const [lockSaveSuccess, setLockSaveSuccess] = useState(false);
@@ -176,6 +180,99 @@ export default function BotsManagement() {
     navigator.clipboard.writeText(url);
     setCopiedId(platformId);
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const handleRegisterWebhookApi = async (platformId: string) => {
+    const current = configs[platformId];
+    if (!current?.token?.trim()) {
+      setTestResult({
+        id: platformId,
+        success: false,
+        message: "لطفاً ابتدا توکن ربات را در کادر بالا وارد فرمایید."
+      });
+      return;
+    }
+    const webhookUrl = `${baseUrl}/api/bot/webhook/${platformId}`;
+    setSettingWebhookId(platformId);
+    try {
+      const res = await fetch("/api/bot/set-webhook", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          platform: platformId,
+          token: current.token.trim(),
+          webhookUrl
+        })
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setTestResult({
+          id: platformId,
+          success: true,
+          message: `وب‌هوک با موفقیت در ${platformId === "telegram" ? "تلگرام" : "بله"} ثبت شد! (${data.description || "Webhook was set"})`
+        });
+      } else {
+        setTestResult({
+          id: platformId,
+          success: false,
+          message: `خطای ${platformId === "telegram" ? "تلگرام" : "سرور"}: ${data.description || "ناموفق"}`
+        });
+      }
+    } catch (e: any) {
+      setTestResult({
+        id: platformId,
+        success: false,
+        message: `خطا در اتصال به سرور: ${e.message}`
+      });
+    } finally {
+      setSettingWebhookId(null);
+    }
+  };
+
+  const handleCheckWebhookInfo = async (platformId: string) => {
+    const current = configs[platformId];
+    if (!current?.token?.trim()) {
+      setTestResult({
+        id: platformId,
+        success: false,
+        message: "لطفاً ابتدا توکن ربات را وارد فرمایید."
+      });
+      return;
+    }
+    setTestingId(platformId);
+    try {
+      const res = await fetch("/api/bot/get-webhook-info", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          platform: platformId,
+          token: current.token.trim()
+        })
+      });
+      const data = await res.json();
+      if (data.ok && data.result) {
+        const info = data.result;
+        setTestResult({
+          id: platformId,
+          success: true,
+          message: `وضعیت وب‌هوک: آدرس ثبت‌شده: ${info.url || "تنظیم نشده"} | آخرین خطا: ${info.last_error_message || "ندارد (سالم)"}`
+        });
+      } else {
+        setTestResult({
+          id: platformId,
+          success: false,
+          message: `پاسخ سرور: ${data.description || "خطا در دریافت وضعیت"}`
+        });
+      }
+    } catch (e: any) {
+      setTestResult({
+        id: platformId,
+        success: false,
+        message: `خطا: ${e.message}`
+      });
+    } finally {
+      setTestingId(null);
+    }
   };
 
   const handleSaveConfig = async (platformId: string) => {
@@ -632,6 +729,71 @@ export default function BotsManagement() {
                     {isGuideOpen && (
                       <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl border border-gray-200 dark:border-gray-700 text-xs text-gray-600 dark:text-gray-300 whitespace-pre-line leading-relaxed">
                         {platform.guide}
+                      </div>
+                    )}
+
+                    {/* Direct setWebhook Feature for Telegram and Bale */}
+                    {(platform.id === "telegram" || platform.id === "bale") && (
+                      <div className="p-3.5 bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/80 rounded-xl space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-black text-blue-900 dark:text-blue-200 flex items-center gap-1.5">
+                            <Zap size={14} className="text-amber-500 fill-amber-500" />
+                            <span>ثبت وب‌هوک با متد setWebhook</span>
+                          </span>
+                          <span className="text-[10px] bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 font-bold px-2 py-0.5 rounded-md">
+                            اتصال مستقیم API
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-blue-800/80 dark:text-blue-300/80 leading-relaxed">
+                          پس از وارد کردن توکن، با کلیک روی دکمه زیر، سرور وب‌هوک را مستقیماً در {platform.persianName} ثبت می‌کند و نیازی به کدنویسی یا تنظیمات دستی نیست.
+                        </p>
+                        <div className="flex items-center gap-2 pt-1 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => handleRegisterWebhookApi(platform.id)}
+                            disabled={settingWebhookId === platform.id || !cfg.token}
+                            className="flex-1 min-w-[170px] py-2 px-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-xs font-black flex items-center justify-center gap-1.5 shadow-sm transition-all active:scale-95"
+                          >
+                            <Zap size={13} className={settingWebhookId === platform.id ? "animate-spin" : ""} />
+                            <span>
+                              {settingWebhookId === platform.id ? "درحال ثبت در تلگرام..." : `⚡️ ثبت خودکار وب‌هوک در ${platform.name}`}
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleCheckWebhookInfo(platform.id)}
+                            disabled={testingId === platform.id || !cfg.token}
+                            className="py-2 px-3 bg-white dark:bg-slate-800 border border-blue-300 dark:border-blue-700 hover:bg-blue-50 dark:hover:bg-slate-700 text-blue-700 dark:text-blue-300 rounded-lg text-xs font-bold transition-all disabled:opacity-50"
+                            title="استعلام آخرین وضعیت وب‌هوک از سرور پیام‌رسان"
+                          >
+                            استعلام وضعیت
+                          </button>
+                        </div>
+
+                        {/* Direct Browser Link */}
+                        {cfg.token && (
+                          <div className="pt-2 border-t border-blue-200/60 dark:border-blue-800/50 space-y-1">
+                            <div className="flex items-center justify-between text-[10px] text-gray-600 dark:text-gray-400">
+                              <span>لینک مرورگر جهت ثبت دستی:</span>
+                              <a
+                                href={platform.id === "telegram"
+                                  ? `https://api.telegram.org/bot${cfg.token.trim()}/setWebhook?url=${encodeURIComponent(webhookUrl)}`
+                                  : `https://tapi.bale.ai/bot${cfg.token.trim()}/setWebhook?url=${encodeURIComponent(webhookUrl)}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-blue-600 dark:text-blue-400 font-bold hover:underline inline-flex items-center gap-0.5"
+                              >
+                                <span>تست در مرورگر</span>
+                                <ExternalLink size={10} />
+                              </a>
+                            </div>
+                            <div className="text-[10px] font-mono bg-white dark:bg-slate-900 border border-blue-100 dark:border-blue-900 rounded p-1.5 text-gray-600 dark:text-gray-300 break-all select-all dir-ltr text-left">
+                              {platform.id === "telegram"
+                                ? `https://api.telegram.org/bot${cfg.token.trim()}/setWebhook?url=${webhookUrl}`
+                                : `https://tapi.bale.ai/bot${cfg.token.trim()}/setWebhook?url=${webhookUrl}`}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
 

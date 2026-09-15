@@ -121,6 +121,60 @@ async function startServer() {
     }
   });
 
+  // Helper endpoint to register webhook directly on Telegram / Bale servers
+  app.post("/api/bot/set-webhook", async (req, res) => {
+    const { platform, token, webhookUrl } = req.body;
+    if (!token || !webhookUrl) {
+      return res.status(400).json({ ok: false, description: "توکن و آدرس وب‌هوک الزامی است." });
+    }
+
+    try {
+      if (platform === "telegram") {
+        const apiUrl = `https://api.telegram.org/bot${token}/setWebhook?url=${encodeURIComponent(webhookUrl)}`;
+        const tgRes = await fetch(apiUrl);
+        const data = await tgRes.json();
+        return res.json(data);
+      } else if (platform === "bale") {
+        const apiUrl = `https://tapi.bale.ai/bot${token}/setWebhook?url=${encodeURIComponent(webhookUrl)}`;
+        const baleRes = await fetch(apiUrl);
+        const data = await baleRes.json();
+        return res.json(data);
+      } else {
+        return res.status(400).json({ ok: false, description: `تنظیم خودکار وب‌هوک برای ${platform} از طریق پنل همان پیام‌رسان انجام می‌شود.` });
+      }
+    } catch (err: any) {
+      console.error("setWebhook error:", err);
+      return res.status(500).json({ ok: false, description: err.message || "خطا در برقراری ارتباط با سرور پیام‌رسان" });
+    }
+  });
+
+  // Helper endpoint to get webhook info from Telegram / Bale
+  app.post("/api/bot/get-webhook-info", async (req, res) => {
+    const { platform, token } = req.body;
+    if (!token) {
+      return res.status(400).json({ ok: false, description: "توکن الزامی است." });
+    }
+
+    try {
+      if (platform === "telegram") {
+        const apiUrl = `https://api.telegram.org/bot${token}/getWebhookInfo`;
+        const tgRes = await fetch(apiUrl);
+        const data = await tgRes.json();
+        return res.json(data);
+      } else if (platform === "bale") {
+        const apiUrl = `https://tapi.bale.ai/bot${token}/getWebhookInfo`;
+        const baleRes = await fetch(apiUrl);
+        const data = await baleRes.json();
+        return res.json(data);
+      } else {
+        return res.status(400).json({ ok: false, description: "این پیام‌رسان از این متد پشتیبانی نمی‌کند." });
+      }
+    } catch (err: any) {
+      console.error("getWebhookInfo error:", err);
+      return res.status(500).json({ ok: false, description: err.message || "خطا در ارتباط با سرور پیام‌رسان" });
+    }
+  });
+
   // Broadcast news to channels in all 7 platforms
   app.post("/api/broadcast/publish", async (req, res) => {
     const { title, content, category, targetProvince, imageUrl, mediaType, mediaUrl, mediaName, mediaSize, linkUrl, targetPlatforms, channelIds } = req.body;
