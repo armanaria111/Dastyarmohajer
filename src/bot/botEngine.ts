@@ -3,6 +3,7 @@ import { db } from "../firebase";
 import { getPlatformLockConfig } from "../data/channelLockSettings";
 import { INITIAL_TAZKIRAS, TazkiraRecord } from "../data/initialTazkiras";
 import { INITIAL_JOBS } from "../data/jobsData";
+import { INITIAL_EMBASSIES } from "../data/initialEmbassies";
 
 export interface BotResponse {
   replyText: string;
@@ -950,13 +951,17 @@ async function handleEmbassySearch(queryText: string): Promise<BotResponse> {
 
   try {
     const snap = await getDocs(collection(db, "embassies"));
-    const all = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+    let all = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+    if (all.length === 0) {
+      all = INITIAL_EMBASSIES as any[];
+    }
 
     let matches = all;
     if (!showAll) {
       matches = all.filter(e => 
         (e.name && e.name.toLowerCase().includes(q)) ||
         (e.address && e.address.toLowerCase().includes(q)) ||
+        (e.city && e.city.toLowerCase().includes(q)) ||
         (e.description && e.description.toLowerCase().includes(q))
       );
     }
@@ -969,11 +974,18 @@ async function handleEmbassySearch(queryText: string): Promise<BotResponse> {
       };
     }
 
-    let result = `🏛 **اطلاعات سفارت‌ها و کنسولگری‌ها:**\n\n`;
+    let result = `🏛 **اطلاعات و لوکیشن سفارت‌ها و کنسولگری‌ها:**\n\n`;
     matches.forEach(e => {
       result += `📌 **${e.name || "سفارت / کنسولگری"}**\n`;
       result += `▫️ **آدرس:** ${e.address || "نامشخص"}\n`;
       if (e.phone) result += `▫️ **تلفن تماس:** ${formatClickablePhone(e.phone)}\n`;
+      
+      const loc = e.locationUrl || (e.latitude && e.longitude ? `https://maps.google.com/?q=${e.latitude},${e.longitude}` : (e.address ? `https://maps.google.com/?q=${encodeURIComponent(e.name + " " + e.address)}` : null));
+      if (loc) {
+        result += `▫️ 📍 **لینک لوکیشن و مسیریابی:** [مسیریابی روی نقشه](${loc})\n`;
+      }
+
+      if (e.workingHours) result += `▫️ ⏰ **ساعات کاری:** ${e.workingHours}\n`;
       if (e.website) result += `▫️ **وب‌سایت رسمی:** ${e.website}\n`;
       if (e.description) result += `▫️ **خدمات و توضیحات:** ${e.description}\n`;
       result += `----------------------------\n`;
@@ -1589,14 +1601,11 @@ async function handleGpsRouting(provinceQuery: string): Promise<BotResponse> {
     reply += `🏢 **${i + 1}. ${o.name}**\n`;
     reply += `▫️ **آدرس:** ${o.address}\n`;
     reply += `▫️ ${formatClickablePhone(o.phone)}\n`;
-    reply += `🗺 **لینک‌های مستقیم مسیریابی:**\n`;
-    reply += `• [🚗 مسیریابی با نشان](${neshanUrl})\n`;
-    reply += `• [🚙 مسیریابی با بلد](${baladUrl})\n`;
-    reply += `• [📍 مسیریابی با گوگل مپ](${gmapsUrl})\n`;
+    reply += `▫️ 📍 **لوکیشن:** [باز کردن در نشان، بلد یا نقشه گوشی](https://maps.google.com/?q=${o.lat},${o.lng})\n`;
     reply += `------------------------------------\n`;
   });
 
-  reply += `\n💡 با لمس هر یک از لینک‌های بالا، نقشه در برنامه مسیریاب گوشی شما باز می‌شود.`;
+  reply += `\n💡 با لمس لینک لوکیشن، موقعیت به صورت خودکار در مسیریاب فعال گوشی شما (نشان، بلد یا گوگل‌مپ) باز می‌شود.`;
 
   return {
     replyText: reply,

@@ -131,17 +131,6 @@ export const DEFAULT_BOT_LINKS: BotLinkItem[] = [
     isActive: true,
     color: "from-green-600 to-emerald-500",
   },
-  {
-    id: "shad",
-    name: "Shad",
-    persianName: "کانال و بازوی شاد (آموزش)",
-    iconType: "shad",
-    url: "https://shad.ir/dastyar_mohajer",
-    username: "@dastyar_mohajer",
-    description: "راهنمای ثبت‌نام مدارس، برگه‌های سنجش سلامت و تسهیلات آموزشی اتباع",
-    isActive: true,
-    color: "from-teal-600 to-emerald-600",
-  },
 ];
 
 // Default News Channels
@@ -243,6 +232,8 @@ export function getLandingConfig(): LandingConfig {
   try {
     const parsed = JSON.parse(raw);
     let loadedBots = Array.isArray(parsed?.botLinks) && parsed.botLinks.length > 0 ? parsed.botLinks : DEFAULT_BOT_LINKS;
+    // Ensure shad is never included
+    loadedBots = loadedBots.filter((b: BotLinkItem) => b.id !== "shad");
 
     // If existing saved bots only had 5 bots or missing official ones, merge the missing official platforms
     const existingIds = new Set(loadedBots.map((b: BotLinkItem) => b.id));
@@ -250,6 +241,7 @@ export function getLandingConfig(): LandingConfig {
     if (missingDefaults.length > 0) {
       loadedBots = [...loadedBots, ...missingDefaults];
     }
+    loadedBots = loadedBots.filter((b: BotLinkItem) => b.id !== "shad");
 
     return {
       ...defaultConfig,
@@ -283,10 +275,12 @@ export async function syncLandingConfigFromCloud(): Promise<LandingConfig> {
     const snap = await getDoc(ref);
     if (snap.exists()) {
       const data = snap.data();
+      const rawBots = Array.isArray(data?.botLinks) && data.botLinks.length > 0 ? data.botLinks : local.botLinks;
+      const cleanBots = rawBots.filter((b: BotLinkItem) => b.id !== "shad");
       const merged: LandingConfig = {
         ...local,
         ...data,
-        botLinks: Array.isArray(data?.botLinks) && data.botLinks.length > 0 ? data.botLinks : local.botLinks,
+        botLinks: cleanBots,
         newsChannels: Array.isArray(data?.newsChannels) && data.newsChannels.length > 0 ? data.newsChannels : local.newsChannels,
         announcementText: data?.announcementText || local.announcementText,
       };

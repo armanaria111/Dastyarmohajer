@@ -80,11 +80,11 @@ export default function LandingSettings() {
     setConfig({ ...config, botLinks: [...config.botLinks, newBot] });
   };
 
-  // Restore all 9 official bots
+  // Restore all 8 official bots
   const restoreAllOfficialBots = () => {
-    if (confirm("آیا تمایل دارید تمام ۹ ربات رسمی سامانه (تلگرام، بله، ایتا، روبیکا، سروش+، گپ، آی‌گپ، واتساپ و شاد) بارگذاری و فعال شوند؟")) {
-      // Merge with existing bots without duplicating IDs
-      const existingMap = new Map(config.botLinks.map((b) => [b.id, b]));
+    if (confirm("آیا تمایل دارید تمام ۸ ربات رسمی سامانه (تلگرام، بله، ایتا، روبیکا، سروش+، گپ، آی‌گپ و واتساپ) بارگذاری و فعال شوند؟")) {
+      // Merge with existing bots without duplicating IDs, and excluding shad
+      const existingMap = new Map(config.botLinks.filter((b) => b.id !== "shad").map((b) => [b.id, b]));
       DEFAULT_BOT_LINKS.forEach((defBot) => {
         if (!existingMap.has(defBot.id)) {
           existingMap.set(defBot.id, { ...defBot });
@@ -240,7 +240,7 @@ export default function LandingSettings() {
             <div>
               <span className="font-bold">مدیریت لینک‌های دسترسی به ربات‌های سامانه (تعداد فعلی: {config.botLinks.length} ربات):</span>
               <p className="text-[11px] text-blue-700 dark:text-blue-300 mt-0.5">
-                شامل تمام پیام‌رسان‌های ایرانی و بین‌المللی (تلگرام، بله، ایتا، روبیکا، سروش+، گپ، آی‌گپ، واتساپ و شاد). می‌توانید هر کدام را ویرایش، غیرفعال یا ربات دلخواه اضافه کنید.
+                شامل تمام پیام‌رسان‌های ایرانی و بین‌المللی (تلگرام، بله، ایتا، روبیکا، سروش+، گپ، آی‌گپ و واتساپ). می‌توانید هر کدام را ویرایش، غیرفعال یا ربات دلخواه اضافه کنید.
               </p>
             </div>
             <div className="flex items-center gap-2 shrink-0 flex-wrap">
@@ -248,10 +248,10 @@ export default function LandingSettings() {
                 type="button"
                 onClick={restoreAllOfficialBots}
                 className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs"
-                title="بارگذاری تمام ۹ ربات رسمی سامانه"
+                title="بارگذاری تمام ۸ ربات رسمی سامانه"
               >
                 <Sparkles size={14} />
-                <span>همگام‌سازی تمام ۹ ربات رسمی</span>
+                <span>همگام‌سازی تمام ۸ ربات رسمی</span>
               </button>
               <button
                 type="button"

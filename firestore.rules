@@ -152,5 +152,11 @@ service cloud.firestore {
       allow read: if true;
       allow write: if true;
     }
+
+    // Citizen Branch Address Change Reports
+    match /branch_reports/{reportId} {
+      allow read: if true;
+      allow write: if true;
+    }
   }
 }

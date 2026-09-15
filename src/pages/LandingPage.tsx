@@ -64,6 +64,7 @@ import DateConverterModal from "../components/DateConverterModal";
 import PhotoStandardizerModal from "../components/PhotoStandardizerModal";
 import DrivingQuizModal from "../components/DrivingQuizModal";
 import JobPortalModal from "../components/JobPortalModal";
+import EmbassiesModal from "../components/EmbassiesModal";
 
 export default function LandingPage() {
   const [config, setConfig] = useState<LandingConfig>(() => getLandingConfig());
@@ -79,6 +80,7 @@ export default function LandingPage() {
   const [isConsularFormsOpen, setIsConsularFormsOpen] = useState(false);
   const [isEducationGuideOpen, setIsEducationGuideOpen] = useState(false);
   const [isGpsFinderOpen, setIsGpsFinderOpen] = useState(false);
+  const [isEmbassiesOpen, setIsEmbassiesOpen] = useState(false);
   const [isAiAdvisorOpen, setIsAiAdvisorOpen] = useState(false);
   const [isLostDocsOpen, setIsLostDocsOpen] = useState(false);
   const [isExpiryReminderOpen, setIsExpiryReminderOpen] = useState(false);
@@ -240,6 +242,13 @@ export default function LandingPage() {
             <a href="#services" className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
               خدمات سامانه
             </a>
+            <button
+              onClick={() => setIsEmbassiesOpen(true)}
+              className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors flex items-center gap-1 cursor-pointer"
+            >
+              <Landmark size={14} />
+              <span>سفارت‌ها</span>
+            </button>
             <Link to="/inquiries" className="text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 font-black">
               <FileSearch size={14} />
               <span>استعلامات هوشمند</span>
@@ -700,7 +709,7 @@ export default function LandingPage() {
                   مسیریابی هوشمند دفاتر کفالت
                 </h4>
                 <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                  یافتن نزدیک‌ترین دفتر کفالت با GPS و مسیریابی مستقیم با برنامه‌های نشان، بلد و Google Maps به همراه تلفن تماس.
+                  یافتن نزدیک‌ترین دفتر کفالت با GPS و اتصال مستقیم با دکمه لوکیشن به مسیریاب گوشی (نشان، بلد یا گوگل مپ) به همراه تلفن تماس.
                 </p>
               </div>
               <button
@@ -709,7 +718,30 @@ export default function LandingPage() {
                 className="w-full py-2.5 px-4 bg-blue-50 hover:bg-blue-600 text-blue-700 hover:text-white dark:bg-slate-700 dark:hover:bg-blue-600 dark:text-slate-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
               >
                 <Navigation size={14} />
-                <span>مسیریابی دفاتر (نشان و بلد)</span>
+                <span>مسیریابی و لوکیشن دفاتر</span>
+              </button>
+            </div>
+
+            {/* Embassies & Consulates Location & Info */}
+            <div className="p-6 rounded-3xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs hover:shadow-lg transition-all flex flex-col justify-between space-y-4">
+              <div className="space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950 text-indigo-600 flex items-center justify-center">
+                  <Landmark size={24} />
+                </div>
+                <h4 className="text-base font-black text-slate-900 dark:text-white">
+                  سفارت‌ها و کنسولگری‌ها
+                </h4>
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                  نشانی، تلفن‌های رسمی و اتصال مستقیم با دکمه لوکیشن به مسیریاب گوشی (نشان، بلد یا گوگل مپ) سفارت‌ها و کنسولگری‌ها در تهران، مشهد و زاهدان.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEmbassiesOpen(true)}
+                className="w-full py-2.5 px-4 bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white dark:bg-slate-700 dark:hover:bg-indigo-600 dark:text-slate-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+              >
+                <Landmark size={14} />
+                <span>اطلاعات و لوکیشن سفارت‌ها</span>
               </button>
             </div>
 
@@ -1153,6 +1185,11 @@ export default function LandingPage() {
       <GpsFinderModal
         isOpen={isGpsFinderOpen}
         onClose={() => setIsGpsFinderOpen(false)}
+      />
+
+      <EmbassiesModal
+        isOpen={isEmbassiesOpen}
+        onClose={() => setIsEmbassiesOpen(false)}
       />
 
       <AiLegalAdvisorModal

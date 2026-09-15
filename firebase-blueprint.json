@@ -180,6 +180,28 @@
         "importedAt": { "type": "timestamp" },
         "sourceFile": { "type": "string" }
       }
+    },
+    "branch_reports": {
+      "title": "Citizen Branch Address Reports",
+      "description": "User reports for address changes, relocations, and new Kafalat offices",
+      "properties": {
+        "officeId": { "type": "string" },
+        "officeCode": { "type": "string" },
+        "officeName": { "type": "string" },
+        "province": { "type": "string" },
+        "city": { "type": "string" },
+        "reportType": { "type": "string" },
+        "newAddress": { "type": "string" },
+        "newPhone": { "type": "string" },
+        "newHours": { "type": "string" },
+        "notes": { "type": "string" },
+        "reporterName": { "type": "string" },
+        "reporterPhone": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "resolvedAt": { "type": "string" },
+        "adminNotes": { "type": "string" }
+      }
     }
   }
 }
