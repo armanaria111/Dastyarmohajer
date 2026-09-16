@@ -163,43 +163,57 @@ export default function BotsManagement() {
     webhookInfo?: { url: string; last_error_message?: string; pending_update_count?: number };
     lastMessage?: { senderId: string; userName: string; text: string; time: string };
   } | null>(null);
+  const [pollingStatuses, setPollingStatuses] = useState<Record<string, {
+    active?: boolean;
+    hasToken?: boolean;
+    lastPolledAt?: string;
+    lastMessage?: { senderId: string; userName?: string; text: string; time: string };
+  }>>({});
   const [sendingTest, setSendingTest] = useState(false);
 
   const baseUrl = window.location.origin;
 
-  const fetchTelegramStatus = async () => {
+  const fetchStatuses = async () => {
     try {
-      const res = await fetch("/api/bot/telegram/status");
-      const data = await res.json();
-      setTelegramStatus(data);
+      const [tgRes, allRes] = await Promise.all([
+        fetch("/api/bot/telegram/status").then(r => r.json()).catch(() => null),
+        fetch("/api/bot/polling/status").then(r => r.json()).catch(() => null),
+      ]);
+      if (tgRes) setTelegramStatus(tgRes);
+      if (allRes) setPollingStatuses(allRes);
     } catch (e) {
-      console.warn("Error fetching telegram status:", e);
+      console.warn("Error fetching bot statuses:", e);
     }
   };
 
   useEffect(() => {
-    fetchTelegramStatus();
-    const timer = setInterval(fetchTelegramStatus, 8000);
+    fetchStatuses();
+    const timer = setInterval(fetchStatuses, 6000);
     return () => clearInterval(timer);
   }, []);
 
-  const handleStartPolling = async () => {
+  const handleTogglePolling = async (platformId: string, shouldStart: boolean) => {
     try {
-      const res = await fetch("/api/bot/telegram/start-polling", { method: "POST" });
+      const endpoint = shouldStart ? `/api/bot/${platformId}/start-polling` : `/api/bot/${platformId}/stop-polling`;
+      const res = await fetch(endpoint, { method: "POST" });
       const data = await res.json();
-      fetchTelegramStatus();
+      fetchStatuses();
       setTestResult({
-        id: "telegram",
+        id: platformId,
         success: true,
-        message: data.message || "دریافت زنده فعال شد."
+        message: data.message || `پایش زنده پیام‌ها برای ${platformId} تغییر وضعیت یافت.`
       });
     } catch (e: any) {
       setTestResult({
-        id: "telegram",
+        id: platformId,
         success: false,
         message: e.message
       });
     }
+  };
+
+  const handleStartPolling = async () => {
+    handleTogglePolling("telegram", true);
   };
 
   const handleSendTelegramTest = async () => {
@@ -891,20 +905,76 @@ export default function BotsManagement() {
                       </div>
                     )}
 
+                    {/* Real-time Polling & Live Status for Telegram, Bale, Soroush, Rubika */}
+                    {(platform.id === "bale" || platform.id === "soroush" || platform.id === "rubika") && (
+                      <div className="p-3.5 bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/80 rounded-xl space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="relative flex h-2.5 w-2.5">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                            </span>
+                            <span className="text-xs font-black text-emerald-900 dark:text-emerald-200">
+                              پایش زنده پیام‌ها (مستقل از وب‌هوک و دامنه)
+                            </span>
+                          </div>
+                          <span className="text-[10px] bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 font-bold px-2 py-0.5 rounded-md">
+                            {pollingStatuses[platform.id]?.active ? "🟢 فعال و متصل" : "در انتظار توکن"}
+                          </span>
+                        </div>
+
+                        <p className="text-[11px] text-emerald-800/90 dark:text-emerald-300/90 leading-relaxed">
+                          سرور به طور پیوسته پیام‌های جدید ربات {platform.persianName} را دریافت کرده و به منوها، جستجوها و دکمه‌ها پاسخ می‌دهد؛ بنابراین نیازی به IP ثابت یا وب‌هوک خارجی نیست.
+                        </p>
+
+                        {pollingStatuses[platform.id]?.lastMessage && (
+                          <div className="p-2 bg-white/80 dark:bg-slate-900/70 rounded-lg text-[10px] text-gray-700 dark:text-gray-300 space-y-0.5 border border-emerald-100 dark:border-emerald-900">
+                            <div className="font-bold flex items-center justify-between text-gray-500 dark:text-gray-400">
+                              <span>آخرین فعالیت کاربر:</span>
+                              <span className="font-mono">
+                                {new Date(pollingStatuses[platform.id]?.lastMessage?.time || "").toLocaleTimeString("fa-IR")}
+                              </span>
+                            </div>
+                            <div className="text-emerald-800 dark:text-emerald-300 font-medium truncate">
+                              متن پیام: «{pollingStatuses[platform.id]?.lastMessage?.text}»
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="flex items-center gap-2 pt-1 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => handleTogglePolling(platform.id, true)}
+                            className="py-1.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs"
+                          >
+                            ⚡️ همگام‌سازی و فعال‌سازی پایش زنده
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleTestConnection(platform)}
+                            disabled={testingId === platform.id || !cfg.token}
+                            className="py-1.5 px-3 bg-white dark:bg-slate-800 border border-emerald-300 dark:border-emerald-700 hover:bg-emerald-50 dark:hover:bg-slate-700 text-emerald-700 dark:text-emerald-300 rounded-lg text-xs font-bold transition-all"
+                          >
+                            {testingId === platform.id ? "درحال بررسی..." : "تست زنده اتصال"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Direct setWebhook Feature for Telegram, Bale, and Soroush */}
-                    {(platform.id === "telegram" || platform.id === "bale" || platform.id === "soroush") && (
+                    {(platform.id === "telegram" || platform.id === "bale" || platform.id === "soroush" || platform.id === "rubika") && (
                       <div className="p-3.5 bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/80 rounded-xl space-y-2.5">
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-black text-blue-900 dark:text-blue-200 flex items-center gap-1.5">
                             <Zap size={14} className="text-amber-500 fill-amber-500" />
-                            <span>ثبت وب‌هوک با متد setWebhook</span>
+                            <span>ثبت وب‌هوک و پیکربندی خودکار</span>
                           </span>
                           <span className="text-[10px] bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 font-bold px-2 py-0.5 rounded-md">
                             اتصال مستقیم API
                           </span>
                         </div>
                         <p className="text-[11px] text-blue-800/80 dark:text-blue-300/80 leading-relaxed">
-                          پس از وارد کردن توکن، با کلیک روی دکمه زیر، سرور وب‌هوک را مستقیماً در {platform.persianName} ثبت می‌کند و نیازی به کدنویسی یا تنظیمات دستی نیست.
+                          پس از وارد کردن توکن، با کلیک روی دکمه زیر، سرور وب‌هوک را مستقیماً در {platform.persianName} ثبت کرده و پایش زنده را فعال می‌کند.
                         </p>
                         <div className="flex items-center gap-2 pt-1 flex-wrap">
                           <button
@@ -915,7 +985,7 @@ export default function BotsManagement() {
                           >
                             <Zap size={13} className={settingWebhookId === platform.id ? "animate-spin" : ""} />
                             <span>
-                              {settingWebhookId === platform.id ? `درحال ثبت در ${platform.persianName}...` : `⚡️ ثبت خودکار وب‌هوک در ${platform.persianName}`}
+                              {settingWebhookId === platform.id ? `درحال ثبت در ${platform.persianName}...` : `⚡️ ثبت خودکار و راه‌اندازی در ${platform.persianName}`}
                             </span>
                           </button>
                           {(platform.id === "telegram" || platform.id === "bale") && (

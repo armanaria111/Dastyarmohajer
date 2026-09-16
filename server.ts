@@ -187,18 +187,20 @@ async function startServer() {
   }
 
   async function sendSoroushMessage(token: string, chatId: string | number, text: string, keyboard?: string[][]): Promise<boolean> {
-    if (!chatId) return false;
+    if (!token || !chatId) return false;
     const cleanText = text.replace(/\*\*/g, "").replace(/\[(.*?)\]\((.*?)\)/g, "$1: $2");
+    const rawToken = token.replace(/^bot/, "").trim();
     const soroushKeyboard = keyboard && keyboard.length > 0 ? keyboard.map(row => row.map(btn => ({ text: btn }))) : undefined;
 
-    const endpoints = token ? [
-      `https://api.splus.ir/${token}/sendMessage`,
-      `https://bot.sapp.ir/${token}/sendMessage`
-    ] : [];
+    const endpoints = [
+      `https://api.splus.ir/bot${rawToken}/sendMessage`,
+      `https://api.splus.ir/${rawToken}/sendMessage`,
+      `https://bot.sapp.ir/${rawToken}/sendMessage`
+    ];
 
     for (const url of endpoints) {
       try {
-        // Format 1: Soroush standard bot body
+        // Format 1: Soroush standard bot body (to, type, body)
         const res = await fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -207,7 +209,8 @@ async function startServer() {
             type: "TEXT",
             body: cleanText,
             keyboard: soroushKeyboard
-          })
+          }),
+          signal: AbortSignal.timeout(8000)
         });
         const json = await res.json().catch(() => null);
         if (json && (json.result === "SUCCESS" || json.ok || json.success || json.status === 200)) {
@@ -215,7 +218,7 @@ async function startServer() {
           return true;
         }
 
-        // Format 2: Telegram-compatible payload
+        // Format 2: Telegram-compatible payload (chat_id, text, reply_markup)
         const res2 = await fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -223,7 +226,8 @@ async function startServer() {
             chat_id: chatId,
             text: cleanText,
             reply_markup: soroushKeyboard ? { keyboard: soroushKeyboard, resize_keyboard: true } : { remove_keyboard: true }
-          })
+          }),
+          signal: AbortSignal.timeout(8000)
         });
         const json2 = await res2.json().catch(() => null);
         if (json2 && (json2.ok || json2.result === "SUCCESS" || json2.success)) {
@@ -241,6 +245,7 @@ async function startServer() {
     if (!token || !chatId) return false;
     const cleanText = text.replace(/\*\*/g, "").replace(/\[(.*?)\]\((.*?)\)/g, "$1: $2");
     const endpoints = [
+      `https://eitaayar.ir/api/app/sendMessage`,
       `https://eitaayar.com/api/${token}/sendMessage`,
       `https://api.eitaa.com/bot${token}/sendMessage`
     ];
@@ -250,9 +255,12 @@ async function startServer() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            chat_id: chatId,
-            text: cleanText
-          })
+            token,
+            chat_id: String(chatId),
+            text: cleanText,
+            title: "پیام ربات"
+          }),
+          signal: AbortSignal.timeout(8000)
         });
         const json = await res.json().catch(() => null);
         if (json && (json.ok || json.status === "success" || json.success)) {
@@ -260,7 +268,7 @@ async function startServer() {
           return true;
         }
       } catch (e) {
-        console.warn(`[Eitaa] Send error:`, e);
+        console.warn(`[Eitaa] Send error on ${url}:`, e);
       }
     }
     return false;
@@ -281,7 +289,8 @@ async function startServer() {
           type: "text",
           data: cleanText,
           reply_keyboard: keyboard ? JSON.stringify(keyboard.map(row => row.map(btn => ({ [btn]: btn })))) : undefined
-        })
+        }),
+        signal: AbortSignal.timeout(8000)
       });
       const json = await res.json().catch(() => null);
       return !!(json && !json.error);
@@ -294,26 +303,54 @@ async function startServer() {
   async function sendRubikaMessage(token: string, chatId: string | number, text: string): Promise<boolean> {
     if (!token || !chatId) return false;
     const cleanText = text.replace(/\*\*/g, "").replace(/\[(.*?)\]\((.*?)\)/g, "$1: $2");
-    try {
-      const res = await fetch(`https://messengerg2c4.iranlms.ir/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          api_version: "5",
-          auth: token,
-          data: {
-            object_guid: chatId,
-            message: cleanText
-          },
-          method: "sendMessage"
-        })
-      });
-      const json = await res.json().catch(() => null);
-      return !!(json && json.status === "OK");
-    } catch (e) {
-      console.warn(`[Rubika] Send error:`, e);
-      return false;
+    const endpoints = [
+      `https://botapi.rubika.ir/v3/${token}/sendMessage`,
+      `https://messengerg2c4.iranlms.ir/`
+    ];
+
+    for (const url of endpoints) {
+      try {
+        if (url.includes("botapi.rubika.ir")) {
+          const res = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chat_id: String(chatId),
+              text: cleanText
+            }),
+            signal: AbortSignal.timeout(8000)
+          });
+          const json = await res.json().catch(() => null);
+          if (json && (json.ok || json.status === "OK")) {
+            console.log(`[Rubika] Sent via botapi to ${chatId}`);
+            return true;
+          }
+        } else {
+          const res = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              api_version: "5",
+              auth: token,
+              data: {
+                object_guid: chatId,
+                message: cleanText
+              },
+              method: "sendMessage"
+            }),
+            signal: AbortSignal.timeout(8000)
+          });
+          const json = await res.json().catch(() => null);
+          if (json && json.status === "OK") {
+            console.log(`[Rubika] Sent via messengerg to ${chatId}`);
+            return true;
+          }
+        }
+      } catch (e) {
+        console.warn(`[Rubika] Send error on ${url}:`, e);
+      }
     }
+    return false;
   }
 
   // API Route for Bot Webhooks (Generic endpoint for all messengers)
@@ -468,6 +505,12 @@ async function startServer() {
 
     botTokensCache.set(platform, cleanToken);
 
+    // Auto-trigger polling runner immediately for platforms that support it
+    if (platform === "telegram") startTelegramPolling();
+    else if (platform === "bale") startBalePolling();
+    else if (platform === "soroush") startSoroushPolling();
+    else if (platform === "rubika") startRubikaPolling();
+
     try {
       await setDoc(doc(clientDb, "bot_configs", platform), {
         token: cleanToken,
@@ -491,14 +534,16 @@ async function startServer() {
         const data = await baleRes.json();
         return res.json(data);
       } else if (platform === "soroush") {
+        const rawSoroushToken = cleanToken.replace(/^bot/, "").trim();
         const endpoints = [
-          `https://api.splus.ir/${cleanToken}/setWebhook?url=${encodeURIComponent(cleanWebhookUrl)}`,
-          `https://bot.sapp.ir/${cleanToken}/setWebhook?url=${encodeURIComponent(cleanWebhookUrl)}`
+          `https://api.splus.ir/bot${rawSoroushToken}/setWebhook?url=${encodeURIComponent(cleanWebhookUrl)}`,
+          `https://api.splus.ir/${rawSoroushToken}/setWebhook?url=${encodeURIComponent(cleanWebhookUrl)}`,
+          `https://bot.sapp.ir/${rawSoroushToken}/setWebhook?url=${encodeURIComponent(cleanWebhookUrl)}`
         ];
         let lastResult: any = null;
         for (const url of endpoints) {
           try {
-            const sRes = await fetch(url);
+            const sRes = await fetch(url, { signal: AbortSignal.timeout(6000) });
             const data = await sRes.json().catch(() => null);
             if (data && (data.ok || data.result === "SUCCESS" || data.success)) {
               return res.json({ ok: true, description: "وب‌هوک سروش پلاس با موفقیت ثبت شد!", result: data });
@@ -510,9 +555,22 @@ async function startServer() {
         }
         return res.json({
           ok: true,
-          description: "درخواست ثبت وب‌هوک به سرورهای سروش ارسال شد. آدرس وب‌هوک را در بات‌ساز (@botmaker) نیز بررسی فرمایید.",
+          description: "وب‌هوک ارسال شد و پایش زنده پیام‌های سروش پلاس نیز در پس‌زمینه فعال گردید.",
           details: lastResult
         });
+      } else if (platform === "rubika") {
+        try {
+          const rRes = await fetch(`https://botapi.rubika.ir/v3/${cleanToken}/updateBotEndpoint`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url: cleanWebhookUrl }),
+            signal: AbortSignal.timeout(6000)
+          });
+          const rData = await rRes.json().catch(() => null);
+          return res.json({ ok: true, description: "پیکربندی روبیکا انجام شد و پایش زنده نیز فعال گردید.", result: rData });
+        } catch (e) {
+          return res.json({ ok: true, description: "پایش زنده پیام‌های روبیکا در سرور فعال شد." });
+        }
       } else {
         return res.status(200).json({
           ok: true,
@@ -775,6 +833,341 @@ async function startServer() {
       targetChat,
       message: sent ? `پیام آزمایشی با موفقیت به شناسه ${targetChat} در تلگرام تحویل داده شد!` : "خطا در ارسال پیام تلگرام"
     });
+  });
+
+  // ==========================================
+  // Bale Long Polling Runner
+  // ==========================================
+  let balePollingActive = false;
+  let lastBaleOffset = 0;
+  let lastBalePolledAt: Date | null = null;
+  let lastBaleMessageInfo: any = null;
+
+  async function startBalePolling() {
+    if (balePollingActive) return;
+    balePollingActive = true;
+    console.log("[Bale Polling] Starting Bale background runner...");
+
+    try {
+      const token = await getBotToken("bale");
+      if (token) {
+        await fetch(`https://tapi.bale.ai/bot${token}/deleteWebhook`);
+      }
+    } catch (e) {}
+
+    (async () => {
+      while (balePollingActive) {
+        try {
+          const token = await getBotToken("bale");
+          if (!token) {
+            await new Promise(r => setTimeout(r, 6000));
+            continue;
+          }
+
+          const url = `https://tapi.bale.ai/bot${token}/getUpdates?offset=${lastBaleOffset}&limit=50`;
+          const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
+          const data: any = await response.json();
+          lastBalePolledAt = new Date();
+
+          if (data && data.ok && Array.isArray(data.result)) {
+            for (const update of data.result) {
+              lastBaleOffset = (update.update_id || 0) + 1;
+              try {
+                let senderId = "unknown";
+                let chatId: string | number = "";
+                let userName = "کاربر بله";
+                let messageText = "";
+
+                if (update.message) {
+                  chatId = update.message.chat?.id || update.message.from?.id;
+                  senderId = String(chatId || update.message.from?.id || "user");
+                  userName = update.message.from?.first_name || update.message.from?.username || "کاربر بله";
+                  messageText = update.message.text || "";
+                } else if (update.callback_query) {
+                  chatId = update.callback_query.message?.chat?.id || update.callback_query.from?.id;
+                  senderId = String(chatId || update.callback_query.from?.id || "user");
+                  userName = update.callback_query.from?.first_name || "کاربر بله";
+                  messageText = update.callback_query.data || "";
+                }
+
+                if (!messageText) messageText = "/start";
+
+                lastBaleMessageInfo = {
+                  time: new Date(),
+                  senderId,
+                  userName,
+                  text: messageText,
+                };
+
+                const sessionKey = `bale_${senderId}`;
+                const currentSession = botSessions.get(sessionKey) || {};
+
+                const botResponse = await processBotMessage({
+                  platform: "bale",
+                  userId: senderId,
+                  userName,
+                  text: messageText,
+                  sessionState: currentSession,
+                });
+
+                if (botResponse.sessionState) {
+                  botSessions.set(sessionKey, botResponse.sessionState);
+                }
+
+                if (chatId) {
+                  await sendBaleMessage(token, chatId, botResponse.replyText, botResponse.keyboard);
+                }
+              } catch (itemErr) {
+                console.error("[Bale Polling] Update handling error:", itemErr);
+              }
+            }
+          }
+          await new Promise(r => setTimeout(r, 1200));
+        } catch (err) {
+          await new Promise(r => setTimeout(r, 5000));
+        }
+      }
+    })();
+  }
+
+  function stopBalePolling() {
+    balePollingActive = false;
+    console.log("[Bale Polling] Bale polling runner stopped.");
+  }
+
+  // ==========================================
+  // Soroush Plus Long Polling Runner
+  // ==========================================
+  let soroushPollingActive = false;
+  let lastSoroushOffset = 0;
+  let lastSoroushPolledAt: Date | null = null;
+  let lastSoroushMessageInfo: any = null;
+
+  async function startSoroushPolling() {
+    if (soroushPollingActive) return;
+    soroushPollingActive = true;
+    console.log("[Soroush Polling] Starting Soroush+ background runner...");
+
+    (async () => {
+      while (soroushPollingActive) {
+        try {
+          const rawToken = await getBotToken("soroush");
+          if (!rawToken) {
+            await new Promise(r => setTimeout(r, 6000));
+            continue;
+          }
+          const token = rawToken.replace(/^bot/, "").trim();
+
+          let updatesHandled = false;
+          // Method 1: Soroush getUpdates
+          try {
+            const url = `https://api.splus.ir/bot${token}/getUpdates?offset=${lastSoroushOffset}&limit=50`;
+            const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+            const data: any = await res.json();
+            lastSoroushPolledAt = new Date();
+
+            if (data && data.ok && Array.isArray(data.result) && data.result.length > 0) {
+              updatesHandled = true;
+              for (const update of data.result) {
+                lastSoroushOffset = (update.update_id || 0) + 1;
+                const msg = update.message || update;
+                const chatId = msg.chat?.id || msg.from?.id || msg.from || msg.to || "";
+                const senderId = String(chatId || "user");
+                const userName = msg.from?.first_name || msg.from_name || "کاربر سروش";
+                const text = msg.text || msg.body || "/start";
+
+                lastSoroushMessageInfo = { time: new Date(), senderId, userName, text };
+
+                const sessionKey = `soroush_${senderId}`;
+                const currentSession = botSessions.get(sessionKey) || {};
+
+                const botResponse = await processBotMessage({
+                  platform: "soroush",
+                  userId: senderId,
+                  userName,
+                  text,
+                  sessionState: currentSession,
+                });
+
+                if (botResponse.sessionState) {
+                  botSessions.set(sessionKey, botResponse.sessionState);
+                }
+
+                if (chatId) {
+                  await sendSoroushMessage(token, chatId, botResponse.replyText, botResponse.keyboard);
+                }
+              }
+            }
+          } catch (e) {}
+
+          // Method 2: Soroush Sapp getMessage fallback
+          if (!updatesHandled) {
+            try {
+              const res2 = await fetch(`https://bot.sapp.ir/${token}/getMessage`, { signal: AbortSignal.timeout(8000) });
+              const data2: any = await res2.json();
+              lastSoroushPolledAt = new Date();
+
+              if (data2 && (data2.from || data2.body)) {
+                const chatId = data2.from;
+                const senderId = String(chatId || "user");
+                const text = data2.body || "/start";
+                const userName = data2.from_name || "کاربر سروش";
+
+                lastSoroushMessageInfo = { time: new Date(), senderId, userName, text };
+
+                const sessionKey = `soroush_${senderId}`;
+                const currentSession = botSessions.get(sessionKey) || {};
+
+                const botResponse = await processBotMessage({
+                  platform: "soroush",
+                  userId: senderId,
+                  userName,
+                  text,
+                  sessionState: currentSession,
+                });
+
+                if (botResponse.sessionState) {
+                  botSessions.set(sessionKey, botResponse.sessionState);
+                }
+
+                if (chatId) {
+                  await sendSoroushMessage(token, chatId, botResponse.replyText, botResponse.keyboard);
+                }
+              }
+            } catch (e) {}
+          }
+
+          await new Promise(r => setTimeout(r, 1500));
+        } catch (err) {
+          await new Promise(r => setTimeout(r, 5000));
+        }
+      }
+    })();
+  }
+
+  function stopSoroushPolling() {
+    soroushPollingActive = false;
+    console.log("[Soroush Polling] Soroush polling stopped.");
+  }
+
+  // ==========================================
+  // Rubika Long Polling Runner
+  // ==========================================
+  let rubikaPollingActive = false;
+  let lastRubikaOffset = 0;
+  let lastRubikaPolledAt: Date | null = null;
+  let lastRubikaMessageInfo: any = null;
+
+  async function startRubikaPolling() {
+    if (rubikaPollingActive) return;
+    rubikaPollingActive = true;
+    console.log("[Rubika Polling] Starting Rubika background runner...");
+
+    (async () => {
+      while (rubikaPollingActive) {
+        try {
+          const token = await getBotToken("rubika");
+          if (!token) {
+            await new Promise(r => setTimeout(r, 6000));
+            continue;
+          }
+
+          const url = `https://botapi.rubika.ir/v3/${token}/getUpdates`;
+          const res = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              limit: 50,
+              offset_id: lastRubikaOffset ? String(lastRubikaOffset) : undefined
+            }),
+            signal: AbortSignal.timeout(12000)
+          });
+          const data: any = await res.json().catch(() => null);
+          lastRubikaPolledAt = new Date();
+
+          if (data && (data.ok || data.status === "OK")) {
+            const list = data.result?.updates || data.result;
+            if (Array.isArray(list) && list.length > 0) {
+              for (const item of list) {
+                if (item.update_id) lastRubikaOffset = Number(item.update_id) + 1;
+                const msg = item.new_message || item.message || item;
+                const chatId = msg.chat_id || msg.author_object_guid || msg.chat?.id || "";
+                const senderId = String(chatId || "user");
+                const text = msg.text || "/start";
+
+                lastRubikaMessageInfo = { time: new Date(), senderId, text };
+
+                const sessionKey = `rubika_${senderId}`;
+                const currentSession = botSessions.get(sessionKey) || {};
+
+                const botResponse = await processBotMessage({
+                  platform: "rubika",
+                  userId: senderId,
+                  userName: "کاربر روبیکا",
+                  text,
+                  sessionState: currentSession,
+                });
+
+                if (botResponse.sessionState) {
+                  botSessions.set(sessionKey, botResponse.sessionState);
+                }
+
+                if (chatId) {
+                  await sendRubikaMessage(token, chatId, botResponse.replyText);
+                }
+              }
+            }
+          }
+          await new Promise(r => setTimeout(r, 1500));
+        } catch (err) {
+          await new Promise(r => setTimeout(r, 5000));
+        }
+      }
+    })();
+  }
+
+  function stopRubikaPolling() {
+    rubikaPollingActive = false;
+    console.log("[Rubika Polling] Rubika polling stopped.");
+  }
+
+  // Unified Bot Polling Status for all platforms
+  app.get("/api/bot/polling/status", async (req, res) => {
+    const tgToken = await getBotToken("telegram");
+    const baleToken = await getBotToken("bale");
+    const soroushToken = await getBotToken("soroush");
+    const rubikaToken = await getBotToken("rubika");
+    const eitaaToken = await getBotToken("eitaa");
+    const gapToken = await getBotToken("gap");
+
+    res.json({
+      telegram: { active: telegramPollingActive, hasToken: !!tgToken, lastPolledAt: lastTelegramPolledAt, lastMessage: lastTelegramMessageInfo },
+      bale: { active: balePollingActive, hasToken: !!baleToken, lastPolledAt: lastBalePolledAt, lastMessage: lastBaleMessageInfo },
+      soroush: { active: soroushPollingActive, hasToken: !!soroushToken, lastPolledAt: lastSoroushPolledAt, lastMessage: lastSoroushMessageInfo },
+      rubika: { active: rubikaPollingActive, hasToken: !!rubikaToken, lastPolledAt: lastRubikaPolledAt, lastMessage: lastRubikaMessageInfo },
+      eitaa: { mode: "webhook", hasToken: !!eitaaToken },
+      gap: { mode: "webhook", hasToken: !!gapToken },
+    });
+  });
+
+  // Start polling runner for any platform
+  app.post("/api/bot/:platform/start-polling", async (req, res) => {
+    const { platform } = req.params;
+    if (platform === "telegram") startTelegramPolling();
+    else if (platform === "bale") startBalePolling();
+    else if (platform === "soroush") startSoroushPolling();
+    else if (platform === "rubika") startRubikaPolling();
+    res.json({ ok: true, message: `پایش زنده پیام‌ها برای ${platform} فعال شد.` });
+  });
+
+  // Stop polling runner for any platform
+  app.post("/api/bot/:platform/stop-polling", async (req, res) => {
+    const { platform } = req.params;
+    if (platform === "telegram") stopTelegramPolling();
+    else if (platform === "bale") stopBalePolling();
+    else if (platform === "soroush") stopSoroushPolling();
+    else if (platform === "rubika") stopRubikaPolling();
+    res.json({ ok: true, message: `پایش زنده پیام‌ها برای ${platform} متوقف شد.` });
   });
 
   // Broadcast news to channels in all 7 platforms
@@ -1577,10 +1970,11 @@ async function startServer() {
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
-    // Automatically launch Telegram polling runner
-    startTelegramPolling().catch(err => {
-      console.error("Error initiating Telegram polling:", err);
-    });
+    // Automatically launch polling runners for all supported messengers
+    startTelegramPolling().catch(err => console.error("Error initiating Telegram polling:", err));
+    startBalePolling().catch(err => console.error("Error initiating Bale polling:", err));
+    startSoroushPolling().catch(err => console.error("Error initiating Soroush polling:", err));
+    startRubikaPolling().catch(err => console.error("Error initiating Rubika polling:", err));
   });
 }
 
