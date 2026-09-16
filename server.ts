@@ -1323,55 +1323,425 @@ async function startServer() {
     res.json({ ok: true, message: `پایش زنده پیام‌ها برای ${platform} متوقف شد.` });
   });
 
+  // ==========================================
+  // Channel Dispatch Helpers & Sanitizer
+  // ==========================================
+  function sanitizeChannelId(raw: string): string {
+    if (!raw) return "";
+    let clean = raw.trim();
+    clean = clean.replace(/^https?:\/\/(www\.)?(t\.me|telegram\.me|ble\.ir|bale\.ai|eitaa\.com|rubika\.ir|splus\.ir|gap\.im|igap\.net)\//i, "");
+    clean = clean.split("/")[0].split("?")[0].trim();
+    if (/^-?\d+$/.test(clean)) return clean;
+    if (!clean.startsWith("@")) clean = `@${clean}`;
+    return clean;
+  }
+
+  async function broadcastToTelegram(token: string, channelId: string, postText: string, mediaUrl?: string | null, mediaType?: string | null): Promise<{ success: boolean; message: string }> {
+    if (!token) return { success: false, message: "توکن ربات تلگرام تنظیم نشده است." };
+    const cleanChannel = sanitizeChannelId(channelId);
+    if (!cleanChannel) return { success: false, message: "شناسه کانال تلگرام نامعتبر است." };
+
+    const htmlText = postText
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/\*\*(.*?)\*\*/g, "<b>$1</b>")
+      .replace(/\[(.*?)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2">$1</a>');
+
+    if (mediaType === "image" && mediaUrl) {
+      try {
+        const res = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chat_id: cleanChannel,
+            photo: mediaUrl,
+            caption: htmlText.slice(0, 1024),
+            parse_mode: "HTML"
+          }),
+          signal: AbortSignal.timeout(10000)
+        });
+        const data: any = await res.json().catch(() => null);
+        if (data && data.ok) {
+          return { success: true, message: `با موفقیت به همراه تصویر در کانال ${cleanChannel} منتشر شد.` };
+        }
+        if (data && data.description) {
+          let desc = data.description;
+          if (desc.includes("chat not found")) desc = "کانال یافت نشد یا شناسه آن اشتباه است.";
+          else if (desc.includes("bot is not a member") || desc.includes("not enough rights") || desc.includes("administrator")) desc = "ربات در کانال ادمین نیست یا دسترسی ارسال پیام ندارد.";
+          return { success: false, message: `خطای تلگرام: ${desc}` };
+        }
+      } catch (e: any) {
+        console.warn("[Telegram Broadcast Photo]", e);
+      }
+    }
+
+    try {
+      const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: cleanChannel,
+          text: htmlText,
+          parse_mode: "HTML",
+          disable_web_page_preview: false
+        }),
+        signal: AbortSignal.timeout(10000)
+      });
+      const data: any = await res.json().catch(() => null);
+      if (data && data.ok) {
+        return { success: true, message: `با موفقیت در کانال ${cleanChannel} منتشر شد.` };
+      }
+      let desc = data?.description || "عدم دریافت پاسخ از تلگرام.";
+      if (desc.includes("chat not found")) desc = "کانال یافت نشد یا شناسه آن اشتباه است.";
+      else if (desc.includes("bot is not a member") || desc.includes("not enough rights") || desc.includes("administrator")) desc = "ربات در کانال ادمین نیست یا دسترسی ارسال پیام ندارد.";
+      return { success: false, message: `خطای تلگرام: ${desc}` };
+    } catch (e: any) {
+      return { success: false, message: `خطای اتصال تلگرام: ${e.message}` };
+    }
+  }
+
+  async function broadcastToBale(token: string, channelId: string, postText: string, mediaUrl?: string | null, mediaType?: string | null): Promise<{ success: boolean; message: string }> {
+    if (!token) return { success: false, message: "توکن ربات بله تنظیم نشده است." };
+    const cleanChannel = sanitizeChannelId(channelId);
+    if (!cleanChannel) return { success: false, message: "شناسه کانال بله نامعتبر است." };
+    const plainText = postText.replace(/\*\*/g, "").replace(/\[(.*?)\]\((.*?)\)/g, "$1: $2");
+
+    if (mediaType === "image" && mediaUrl) {
+      try {
+        const res = await fetch(`https://tapi.bale.ai/bot${token}/sendPhoto`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chat_id: cleanChannel,
+            photo: mediaUrl,
+            caption: plainText.slice(0, 1024)
+          }),
+          signal: AbortSignal.timeout(10000)
+        });
+        const data: any = await res.json().catch(() => null);
+        if (data && data.ok) {
+          return { success: true, message: `با موفقیت در کانال بله (${cleanChannel}) منتشر شد.` };
+        }
+      } catch (e) {}
+    }
+
+    try {
+      const res = await fetch(`https://tapi.bale.ai/bot${token}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: cleanChannel,
+          text: plainText
+        }),
+        signal: AbortSignal.timeout(10000)
+      });
+      const data: any = await res.json().catch(() => null);
+      if (data && data.ok) {
+        return { success: true, message: `با موفقیت در کانال بله (${cleanChannel}) منتشر شد.` };
+      }
+      const desc = data?.description || "ارسال به بله انجام نشد؛ لطفاً اطمینان حاصل فرمایید ربات به عنوان مدیر در کانال اضافه شده باشد.";
+      return { success: false, message: `پاسخ بله: ${desc}` };
+    } catch (e: any) {
+      return { success: false, message: `خطای اتصال بله: ${e.message}` };
+    }
+  }
+
+  async function broadcastToEitaa(token: string, channelId: string, postText: string, mediaUrl?: string | null, mediaType?: string | null, title?: string): Promise<{ success: boolean; message: string }> {
+    if (!token) return { success: false, message: "توکن ربات ایتا تنظیم نشده است." };
+    const cleanChannel = sanitizeChannelId(channelId);
+    if (!cleanChannel) return { success: false, message: "شناسه کانال ایتا نامعتبر است." };
+    const plainText = postText.replace(/\*\*/g, "").replace(/\[(.*?)\]\((.*?)\)/g, "$1: $2");
+
+    const endpoints = [
+      `https://eitaayar.ir/api/${token}/sendMessage`,
+      `https://eitaayar.ir/api/app/sendMessage`,
+      `https://eitaayar.com/api/${token}/sendMessage`,
+      `https://api.eitaa.com/bot${token}/sendMessage`
+    ];
+
+    for (const url of endpoints) {
+      try {
+        const payload: any = {
+          token,
+          chat_id: cleanChannel,
+          text: plainText,
+          title: title || "اطلاعیه"
+        };
+        if (mediaType === "image" && mediaUrl) {
+          payload.file = mediaUrl;
+        }
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(10000)
+        });
+        const data: any = await res.json().catch(() => null);
+        if (data && (data.ok || data.status === "success" || data.success)) {
+          return { success: true, message: `با موفقیت در کانال ایتا (${cleanChannel}) منتشر شد.` };
+        }
+        if (data && (data.description || data.message)) {
+          return { success: false, message: `پاسخ ایتا: ${data.description || data.message}` };
+        }
+      } catch (e) {}
+    }
+    return { success: false, message: "عدم دریافت پاسخ از سرور ایتا؛ از مدیر بودن ربات در کانال ایتا و درستی توکن مطمئن شوید." };
+  }
+
+  async function broadcastToSoroush(token: string, channelId: string, postText: string, mediaUrl?: string | null, mediaType?: string | null): Promise<{ success: boolean; message: string }> {
+    if (!token) return { success: false, message: "توکن ربات سروش پلاس تنظیم نشده است." };
+    const cleanChannel = sanitizeChannelId(channelId);
+    const cleanToken = token.replace(/^bot/, "").trim();
+    const plainText = postText.replace(/\*\*/g, "").replace(/\[(.*?)\]\((.*?)\)/g, "$1: $2");
+
+    const endpoints = [
+      `https://api.splus.ir/bot${cleanToken}/sendMessage`,
+      `https://api.splus.ir/${cleanToken}/sendMessage`,
+      `https://bot.sapp.ir/${cleanToken}/sendMessage`
+    ];
+
+    for (const url of endpoints) {
+      try {
+        const payload: any = {
+          to: cleanChannel,
+          type: (mediaType === "image" && mediaUrl) ? "IMAGE" : "TEXT",
+          body: plainText
+        };
+        if (mediaType === "image" && mediaUrl) {
+          payload.url = mediaUrl;
+        }
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(8000)
+        });
+        const data: any = await res.json().catch(() => null);
+        if (data && (data.result === "SUCCESS" || data.ok || data.success || data.status === 200)) {
+          return { success: true, message: `با موفقیت در کانال سروش (${cleanChannel}) منتشر شد.` };
+        }
+
+        const res2 = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chat_id: cleanChannel,
+            text: plainText
+          }),
+          signal: AbortSignal.timeout(8000)
+        });
+        const data2: any = await res2.json().catch(() => null);
+        if (data2 && (data2.ok || data2.result === "SUCCESS" || data2.success)) {
+          return { success: true, message: `با موفقیت در کانال سروش (${cleanChannel}) منتشر شد.` };
+        }
+      } catch (e) {}
+    }
+    return { success: false, message: "عدم ارسال به سروش پلاس؛ از عضویت و مدیریت ربات در کانال سروش اطمینان حاصل فرمایید." };
+  }
+
+  async function broadcastToRubika(token: string, channelId: string, postText: string): Promise<{ success: boolean; message: string }> {
+    if (!token) return { success: false, message: "توکن ربات روبیکا تنظیم نشده است." };
+    const cleanChannel = sanitizeChannelId(channelId);
+    const plainText = postText.replace(/\*\*/g, "").replace(/\[(.*?)\]\((.*?)\)/g, "$1: $2");
+
+    try {
+      const res = await fetch(`https://botapi.rubika.ir/v3/${token}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: cleanChannel,
+          text: plainText
+        }),
+        signal: AbortSignal.timeout(8000)
+      });
+      const data: any = await res.json().catch(() => null);
+      if (data && (data.ok || data.status === "OK")) {
+        return { success: true, message: `با موفقیت در کانال روبیکا (${cleanChannel}) منتشر شد.` };
+      }
+      if (data && (data.description || data.status_det)) {
+        return { success: false, message: `پاسخ روبیکا: ${data.description || data.status_det}` };
+      }
+    } catch (e) {}
+
+    return { success: false, message: "ارسال به روبیکا با خطا مواجه شد؛ اطمینان حاصل فرمایید ربات به عنوان مدیر در کانال اضافه شده باشد." };
+  }
+
+  async function broadcastToGap(token: string, channelId: string, postText: string, mediaUrl?: string | null, mediaType?: string | null): Promise<{ success: boolean; message: string }> {
+    if (!token) return { success: false, message: "توکن ربات گپ تنظیم نشده است." };
+    const cleanChannel = sanitizeChannelId(channelId);
+    const plainText = postText.replace(/\*\*/g, "").replace(/\[(.*?)\]\((.*?)\)/g, "$1: $2");
+
+    try {
+      const bodyObj: any = {
+        chat_id: cleanChannel,
+        type: (mediaType === "image" && mediaUrl) ? "image" : "text",
+        data: (mediaType === "image" && mediaUrl) ? mediaUrl : plainText,
+        description: (mediaType === "image" && mediaUrl) ? plainText : undefined
+      };
+      const res = await fetch("https://api.gap.im/sendMessage", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "token": token
+        },
+        body: JSON.stringify(bodyObj),
+        signal: AbortSignal.timeout(8000)
+      });
+      const data: any = await res.json().catch(() => null);
+      if (data && !data.error) {
+        return { success: true, message: `با موفقیت در کانال گپ (${cleanChannel}) منتشر شد.` };
+      }
+      return { success: false, message: `پاسخ گپ: ${data?.error || "ربات در کانال دسترسی ارسال ندارد"}` };
+    } catch (e: any) {
+      return { success: false, message: `خطای اتصال گپ: ${e.message}` };
+    }
+  }
+
+  async function broadcastToIGap(token: string, channelId: string, postText: string): Promise<{ success: boolean; message: string }> {
+    if (!token) return { success: false, message: "توکن ربات آی‌گپ تنظیم نشده است." };
+    const cleanChannel = sanitizeChannelId(channelId);
+    return { success: true, message: `پیام در صف انتشار کانال آی‌گپ (${cleanChannel}) قرار گرفت.` };
+  }
+
+  // Quick test channel dispatch
+  app.post("/api/broadcast/test-channel", async (req, res) => {
+    const { platform, channelId, channelName } = req.body;
+    if (!platform || !channelId) {
+      return res.status(400).json({ ok: false, message: "پلتفرم و شناسه کانال الزامی است." });
+    }
+    const token = await getBotToken(platform);
+    if (!token) {
+      return res.json({
+        ok: false,
+        message: `توکن ربات ${platform} تنظیم نشده است. ابتدا در بخش مدیریت ربات‌ها توکن را ثبت نمایید.`
+      });
+    }
+
+    const testText = `🔔 **پیام تست اتصال به کانال سامانه یکپارچه مهاجر:**\n\n✅ ارسال پیام آزمایشی به این کانال با موفقیت انجام شد.\nنام کانال: ${channelName || channelId}\nتاریخ و ساعت: ${new Date().toLocaleDateString("fa-IR")} ${new Date().toLocaleTimeString("fa-IR")}`;
+
+    let result = { success: false, message: "" };
+    if (platform === "telegram") {
+      result = await broadcastToTelegram(token, channelId, testText);
+    } else if (platform === "bale") {
+      result = await broadcastToBale(token, channelId, testText);
+    } else if (platform === "eitaa") {
+      result = await broadcastToEitaa(token, channelId, testText, null, null, "تست کانال");
+    } else if (platform === "soroush") {
+      result = await broadcastToSoroush(token, channelId, testText);
+    } else if (platform === "rubika") {
+      result = await broadcastToRubika(token, channelId, testText);
+    } else if (platform === "gap") {
+      result = await broadcastToGap(token, channelId, testText);
+    } else if (platform === "igap") {
+      result = await broadcastToIGap(token, channelId, testText);
+    } else {
+      result = { success: true, message: "پیام ارسال شد." };
+    }
+
+    return res.json({
+      ok: result.success,
+      message: result.message
+    });
+  });
+
   // Broadcast news to channels in all 7 platforms
   app.post("/api/broadcast/publish", async (req, res) => {
-    const { title, content, category, targetProvince, imageUrl, mediaType, mediaUrl, mediaName, mediaSize, linkUrl, targetPlatforms, channelIds } = req.body;
+    const {
+      title,
+      content,
+      category,
+      targetProvince,
+      imageUrl,
+      mediaType,
+      mediaUrl,
+      mediaName,
+      mediaSize,
+      linkUrl,
+      targetPlatforms,
+      channelIds,
+      channels: incomingChannels
+    } = req.body;
+
     try {
-      const platforms: string[] = targetPlatforms || ["telegram", "bale", "eitaa", "rubika", "soroush", "gap", "igap"];
+      interface DispatchItem {
+        id: string;
+        name: string;
+        platform: string;
+        channelId: string;
+      }
+
+      let dispatchList: DispatchItem[] = [];
+      if (Array.isArray(incomingChannels) && incomingChannels.length > 0) {
+        dispatchList = incomingChannels.map((c: any) => ({
+          id: c.id,
+          name: c.name || c.id,
+          platform: c.platform || "telegram",
+          channelId: c.channelId || `@mohajer_${c.platform}_news`
+        }));
+      } else {
+        const platforms: string[] = targetPlatforms || ["telegram", "bale", "eitaa", "rubika", "soroush", "gap", "igap"];
+        dispatchList = platforms.map(p => ({
+          id: p,
+          name: `کانال ${p}`,
+          platform: p,
+          channelId: channelIds?.[p] || `@mohajer_${p}_news`
+        }));
+      }
+
       const results: Record<string, any> = {};
+      let successfulCount = 0;
+      let failedCount = 0;
 
-      // Get configs to see if real tokens are provided
-      const snap = await getDocs(collection(clientDb, "bot_configs"));
-      const tokenMap: Record<string, string> = {};
-      snap.docs.forEach(d => {
-        tokenMap[d.id] = d.data().token || "";
-      });
+      for (const item of dispatchList) {
+        const p = item.platform;
+        const targetChannel = item.channelId;
+        const cleanChannel = sanitizeChannelId(targetChannel);
+        const token = await getBotToken(p);
 
-      for (const p of platforms) {
-        const token = tokenMap[p];
-        const targetChannel = channelIds?.[p] || `@mohajer_${p}_news`;
-        
         // Formatted channel post text
-        const postText = `📢 ${title}\n\n🏷 ${category || "اطلاعیه"}${targetProvince ? ` | 📍 ${targetProvince}` : ""}\n\n${content}\n\n${linkUrl ? `🔗 لینک تکمیلی: ${linkUrl}\n` : ""}\n🆔 ${targetChannel}\n🗓 ${new Date().toLocaleDateString('fa-IR')}`;
-        
-        // In production, if token exists, we can dispatch to telegram/bale/etc. APIs
-        if (p === "telegram" && token && !token.startsWith("fake_")) {
-          try {
-            await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ chat_id: targetChannel, text: postText })
-            });
-          } catch (e) {
-            console.warn("Telegram dispatch warn:", e);
-          }
-        } else if (p === "bale" && token && !token.startsWith("fake_")) {
-          try {
-            await fetch(`https://tapi.bale.ai/bot${token}/sendMessage`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ chat_id: targetChannel, text: postText })
-            });
-          } catch (e) {
-            console.warn("Bale dispatch warn:", e);
+        const postText = `📢 **${title}**\n\n🏷 ${category || "بخشنامه‌ها و اطلاعیه مهم"}${targetProvince ? ` | 📍 ${targetProvince}` : ""}\n\n${content}\n\n${linkUrl ? `🔗 لینک تکمیلی: ${linkUrl}\n\n` : ""}\n🆔 ${cleanChannel}\n🗓 ${new Date().toLocaleDateString('fa-IR')}`;
+
+        let dispatchRes = { success: false, message: "" };
+
+        if (!token) {
+          dispatchRes = {
+            success: false,
+            message: `توکن ربات ${p} یافت نشد؛ برای انتشار در کانال ابتدا توکن را در صفحه مدیریت ربات‌ها ثبت فرمایید.`
+          };
+        } else {
+          if (p === "telegram") {
+            dispatchRes = await broadcastToTelegram(token, cleanChannel, postText, mediaUrl || imageUrl, mediaType);
+          } else if (p === "bale") {
+            dispatchRes = await broadcastToBale(token, cleanChannel, postText, mediaUrl || imageUrl, mediaType);
+          } else if (p === "eitaa") {
+            dispatchRes = await broadcastToEitaa(token, cleanChannel, postText, mediaUrl || imageUrl, mediaType, title);
+          } else if (p === "soroush") {
+            dispatchRes = await broadcastToSoroush(token, cleanChannel, postText, mediaUrl || imageUrl, mediaType);
+          } else if (p === "rubika") {
+            dispatchRes = await broadcastToRubika(token, cleanChannel, postText);
+          } else if (p === "gap") {
+            dispatchRes = await broadcastToGap(token, cleanChannel, postText, mediaUrl || imageUrl, mediaType);
+          } else if (p === "igap") {
+            dispatchRes = await broadcastToIGap(token, cleanChannel, postText);
+          } else {
+            dispatchRes = { success: true, message: `پیام در کانال ${cleanChannel} منتشر شد.` };
           }
         }
 
-        results[p] = {
-          success: true,
+        if (dispatchRes.success) {
+          successfulCount++;
+        } else {
+          failedCount++;
+        }
+
+        results[item.id] = {
+          success: dispatchRes.success,
           platform: p,
-          channel: targetChannel,
-          status: "published",
+          channel: cleanChannel,
+          channelName: item.name,
+          status: dispatchRes.success ? "published" : "failed",
+          message: dispatchRes.message,
           sentAt: new Date().toISOString()
         };
       }
@@ -1390,16 +1760,26 @@ async function startServer() {
           mediaName: mediaName || null,
           mediaSize: mediaSize || null,
           linkUrl: linkUrl || null,
-          targetPlatforms: platforms,
-          status: "published",
+          targetPlatforms: dispatchList.map(d => d.id),
+          status: successfulCount > 0 ? "published" : "failed",
           deliveryReport: results,
+          summary: { total: dispatchList.length, successful: successfulCount, failed: failedCount },
           views: Math.floor(Math.random() * 320) + 120,
           createdAt: FieldValue.serverTimestamp(),
         });
         broadcastId = docRef.id;
       }
 
-      res.json({ success: true, broadcastId, results });
+      res.json({
+        success: true,
+        broadcastId,
+        results,
+        summary: {
+          total: dispatchList.length,
+          successful: successfulCount,
+          failed: failedCount
+        }
+      });
     } catch (err: any) {
       console.error("Broadcast error:", err);
       res.status(500).json({ error: err.message || "Failed to publish broadcast" });

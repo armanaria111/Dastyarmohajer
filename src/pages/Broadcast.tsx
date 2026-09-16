@@ -37,7 +37,9 @@ import {
   Film,
   FileText,
   Download,
-  Play
+  Play,
+  AlertTriangle,
+  Check
 } from "lucide-react";
 import MediaUploader, { MediaValue } from "../components/MediaUploader";
 
@@ -68,6 +70,20 @@ export interface BroadcastItem {
   status: string;
   createdAt: any;
   views?: number;
+  deliveryReport?: Record<string, {
+    success: boolean;
+    platform: string;
+    channel: string;
+    channelName?: string;
+    status: string;
+    message?: string;
+    sentAt: string;
+  }>;
+  summary?: {
+    total: number;
+    successful: number;
+    failed: number;
+  };
 }
 
 const DEFAULT_CHANNELS: ChannelConfig[] = [
@@ -136,6 +152,16 @@ export default function Broadcast() {
 
   // Channel edit modal
   const [editingChannel, setEditingChannel] = useState<ChannelConfig | null>(null);
+
+  // Channel test state & delivery report modal
+  const [testingChannelId, setTestingChannelId] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<{ id: string; success: boolean; message: string } | null>(null);
+  const [deliveryReportModal, setDeliveryReportModal] = useState<{
+    show: boolean;
+    title: string;
+    summary?: any;
+    results?: Record<string, any>;
+  } | null>(null);
 
   useEffect(() => {
     // 1. Subscribe to broadcasts
@@ -346,6 +372,36 @@ export default function Broadcast() {
     }
   };
 
+  const handleTestChannel = async (channel: ChannelConfig) => {
+    setTestingChannelId(channel.id);
+    setTestResult(null);
+    try {
+      const res = await fetch("/api/broadcast/test-channel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          platform: channel.platform,
+          channelId: channel.channelId,
+          channelName: channel.name
+        })
+      });
+      const data = await res.json();
+      setTestResult({
+        id: channel.id,
+        success: !!data.ok,
+        message: data.message || (data.ok ? "ارسال پیام تست با موفقیت انجام شد." : "خطا در ارسال پیام تست")
+      });
+    } catch (e: any) {
+      setTestResult({
+        id: channel.id,
+        success: false,
+        message: `خطای اتصال: ${e.message}`
+      });
+    } finally {
+      setTestingChannelId(null);
+    }
+  };
+
   const handlePublish = async (e: React.FormEvent) => {
     e.preventDefault();
     const selectedPlatforms = channels.filter(c => c.selected).map(c => c.id);
@@ -388,8 +444,9 @@ export default function Broadcast() {
         setSuccessMessage(`خبر «${title}» با موفقیت ویرایش و در کانال‌ها بروزرسانی شد! ✏️`);
         setEditingBroadcastId(null);
       } else {
+        const selectedChannels = channels.filter(c => c.selected);
         // 1. Dispatch to server-side broadcasting API
-        await fetch("/api/broadcast/publish", {
+        const publishRes = await fetch("/api/broadcast/publish", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -403,13 +460,21 @@ export default function Broadcast() {
             mediaName: activeMediaName,
             mediaSize: activeMediaSize,
             linkUrl: linkUrl || null,
+            channels: selectedChannels.map(c => ({
+              id: c.id,
+              name: c.name,
+              platform: c.platform,
+              channelId: c.channelId
+            })),
             targetPlatforms: selectedPlatforms,
             channelIds: channelIdMap,
             skipFirestoreAdd: true
           })
         });
 
-        // 2. Also save to Firestore with full fields
+        const publishData = await publishRes.json();
+
+        // 2. Also save to Firestore with full fields & delivery report
         await addDoc(collection(db, "broadcasts"), {
           title,
           category,
@@ -422,12 +487,29 @@ export default function Broadcast() {
           mediaSize: activeMediaSize,
           linkUrl: linkUrl || null,
           targetPlatforms: selectedPlatforms,
-          status: "published",
+          status: publishData.summary?.successful > 0 ? "published" : (selectedPlatforms.length === 0 ? "draft" : "published"),
+          deliveryReport: publishData.results || null,
+          summary: publishData.summary || null,
           views: Math.floor(Math.random() * 250) + 50,
           createdAt: Timestamp.now()
         });
 
-        setSuccessMessage(`خبر «${title}» با موفقیت در ${selectedPlatforms.length} کانال منتشر گردید! 🚀`);
+        const totalSuccess = publishData.summary?.successful || 0;
+        const totalChannels = selectedChannels.length;
+
+        if (totalSuccess === totalChannels && totalChannels > 0) {
+          setSuccessMessage(`خبر «${title}» با موفقیت در تمامی ${totalChannels} کانال ارسال شد! 🚀`);
+        } else {
+          setSuccessMessage(`خبر در ${totalSuccess} کانال از ${totalChannels} کانال با موفقیت مخابره شد. (جزئیات در گزارش انتشار)`);
+        }
+
+        // Open detailed delivery report modal so admin sees channel-by-channel status
+        setDeliveryReportModal({
+          show: true,
+          title,
+          summary: publishData.summary,
+          results: publishData.results
+        });
       }
 
       // Memory and Storage clean-up: if autoClearImage is true, instantly clear media from state
@@ -561,41 +643,86 @@ export default function Broadcast() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-56 overflow-y-auto pr-1">
+            {/* Permissions Guide Callout */}
+            <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-800/60 rounded-2xl p-3 text-[11px] text-amber-800 dark:text-amber-200 flex items-start gap-2 leading-relaxed">
+              <AlertCircle size={15} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-bold">راهنمای انتشار در کانال‌ها:</span> برای ارسال مستقیم، حتماً ربات هر پیام‌رسان را در کانال مقصد به عنوان <span className="font-bold text-amber-900 dark:text-amber-100">مدیر (Administrator)</span> با دسترسی ارسال پیام اضافه فرمایید. با زدن دکمه <span className="font-bold">«تست ارسال»</span> روی هر کانال، از صحت دسترسی مطمئن شوید.
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-64 overflow-y-auto pr-1">
               {channels.map((channel) => (
                 <div
                   key={channel.id}
-                  className={`p-2.5 rounded-2xl border transition-all flex items-center justify-between gap-2 ${
+                  className={`p-2.5 rounded-2xl border transition-all flex flex-col gap-2 ${
                     channel.selected
-                      ? "border-blue-500 bg-blue-50/50 dark:bg-blue-950/20"
-                      : "border-gray-200 dark:border-gray-700 opacity-60 hover:opacity-100"
+                      ? "border-blue-500 bg-blue-50/50 dark:bg-blue-950/20 shadow-xs"
+                      : "border-gray-200 dark:border-gray-700 opacity-70 hover:opacity-100"
                   }`}
                 >
-                  <label className="flex items-center gap-2.5 cursor-pointer flex-1 select-none min-w-0">
-                    <input
-                      type="checkbox"
-                      checked={channel.selected}
-                      onChange={() => toggleChannel(channel.id)}
-                      className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer shrink-0"
-                    />
-                    <div className="min-w-0">
-                      <span className={`text-xs font-bold block truncate ${channel.color}`}>
-                        {channel.name}
-                      </span>
-                      <span className="text-[10px] text-gray-400 font-mono block truncate" dir="ltr">
-                        {channel.channelId}
-                      </span>
-                    </div>
-                  </label>
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="flex items-center gap-2.5 cursor-pointer flex-1 select-none min-w-0">
+                      <input
+                        type="checkbox"
+                        checked={channel.selected}
+                        onChange={() => toggleChannel(channel.id)}
+                        className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer shrink-0"
+                      />
+                      <div className="min-w-0">
+                        <span className={`text-xs font-bold block truncate ${channel.color}`}>
+                          {channel.name}
+                        </span>
+                        <span className="text-[10px] text-gray-400 font-mono block truncate" dir="ltr">
+                          {channel.channelId}
+                        </span>
+                      </div>
+                    </label>
 
-                  <button
-                    type="button"
-                    onClick={() => setEditingChannel(channel)}
-                    className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-gray-700 rounded-lg shrink-0"
-                    title="ویرایش لینک و آیدی کانال"
-                  >
-                    <Edit3 size={13} />
-                  </button>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleTestChannel(channel)}
+                        disabled={testingChannelId === channel.id}
+                        className="px-2 py-1 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 hover:border-emerald-500 text-[10px] font-bold text-gray-700 dark:text-gray-200 hover:text-emerald-600 rounded-lg flex items-center gap-1 transition-all disabled:opacity-50"
+                        title="ارسال پیام تست به این کانال برای بررسی دسترسی ربات"
+                      >
+                        {testingChannelId === channel.id ? (
+                          <RefreshCw size={11} className="animate-spin text-emerald-600" />
+                        ) : (
+                          <Send size={11} className="text-emerald-600" />
+                        )}
+                        <span>تست</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setEditingChannel(channel)}
+                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-gray-700 rounded-lg"
+                        title="ویرایش لینک و آیدی کانال"
+                      >
+                        <Edit3 size={13} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Inline Test Result Feedback */}
+                  {testResult?.id === channel.id && (
+                    <div
+                      className={`text-[10px] px-2 py-1 rounded-lg flex items-start gap-1 font-medium ${
+                        testResult.success
+                          ? "bg-emerald-100/70 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/40"
+                          : "bg-amber-100/70 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/40"
+                      }`}
+                    >
+                      {testResult.success ? (
+                        <CheckCircle2 size={12} className="text-emerald-600 shrink-0 mt-0.5" />
+                      ) : (
+                        <AlertTriangle size={12} className="text-amber-600 shrink-0 mt-0.5" />
+                      )}
+                      <span className="leading-tight">{testResult.message}</span>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -965,13 +1092,39 @@ export default function Broadcast() {
                 </div>
 
                 <div className="pt-3 border-t border-gray-200/60 dark:border-gray-800 flex items-center justify-between text-[11px] text-gray-400">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="flex items-center gap-1">
                       <Eye size={12} />
                       <span>{item.views || 180} مشاهده</span>
                     </span>
                     <span>•</span>
-                    <span>{item.targetPlatforms?.length || 7} کانال</span>
+                    {item.summary ? (
+                      <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                        item.summary.failed === 0
+                          ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
+                          : "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300"
+                      }`}>
+                        {item.summary.successful}/{item.summary.total} ارسال موفق
+                      </span>
+                    ) : (
+                      <span>{item.targetPlatforms?.length || 7} کانال</span>
+                    )}
+
+                    {item.deliveryReport && (
+                      <button
+                        type="button"
+                        onClick={() => setDeliveryReportModal({
+                          show: true,
+                          title: item.title,
+                          summary: item.summary,
+                          results: item.deliveryReport
+                        })}
+                        className="text-blue-600 dark:text-blue-400 hover:underline font-bold inline-flex items-center gap-1 mr-1"
+                      >
+                        <CheckCircle2 size={11} />
+                        <span>گزارش ارسال</span>
+                      </button>
+                    )}
                   </div>
                   <span dir="ltr">
                     {item.createdAt?.toDate ? item.createdAt.toDate().toLocaleDateString('fa-IR') : 'به تازگی'}
@@ -1198,6 +1351,120 @@ export default function Broadcast() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Delivery Report */}
+      {deliveryReportModal?.show && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-3xl p-6 max-w-lg w-full border border-gray-100 dark:border-gray-700 shadow-2xl space-y-4 animate-in zoom-in-95 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-700 pb-3 shrink-0">
+              <div className="flex items-center gap-2">
+                <span className="p-2 bg-blue-50 dark:bg-blue-900/40 text-blue-600 rounded-xl">
+                  <Megaphone size={20} />
+                </span>
+                <div>
+                  <h3 className="font-bold text-gray-900 dark:text-white text-base">گزارش وضعیت انتشار در کانال‌ها</h3>
+                  <p className="text-[11px] text-gray-400 truncate max-w-xs">{deliveryReportModal.title}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setDeliveryReportModal(null)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Summary Statistics */}
+            {deliveryReportModal.summary && (
+              <div className="grid grid-cols-3 gap-2 shrink-0">
+                <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-2xl text-center border border-gray-100 dark:border-gray-800">
+                  <span className="block text-[11px] text-gray-500 mb-0.5">کل کانال‌ها</span>
+                  <span className="text-base font-bold text-gray-900 dark:text-white">
+                    {deliveryReportModal.summary.total}
+                  </span>
+                </div>
+                <div className="bg-emerald-50 dark:bg-emerald-950/30 p-3 rounded-2xl text-center border border-emerald-200/50 dark:border-emerald-800/40">
+                  <span className="block text-[11px] text-emerald-600 dark:text-emerald-400 mb-0.5">ارسال موفق</span>
+                  <span className="text-base font-bold text-emerald-600 dark:text-emerald-400">
+                    {deliveryReportModal.summary.successful}
+                  </span>
+                </div>
+                <div className="bg-amber-50 dark:bg-amber-950/30 p-3 rounded-2xl text-center border border-amber-200/50 dark:border-amber-800/40">
+                  <span className="block text-[11px] text-amber-600 dark:text-amber-400 mb-0.5">نیاز به بررسی</span>
+                  <span className="text-base font-bold text-amber-600 dark:text-amber-400">
+                    {deliveryReportModal.summary.failed}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* List of Channels & Results */}
+            <div className="overflow-y-auto space-y-2 flex-1 pr-1">
+              {deliveryReportModal.results ? (
+                Object.entries(deliveryReportModal.results).map(([channelKey, res]: [string, any]) => (
+                  <div
+                    key={channelKey}
+                    className={`p-3 rounded-2xl border text-xs flex flex-col gap-1.5 ${
+                      res.success
+                        ? "border-emerald-200/70 bg-emerald-50/40 dark:bg-emerald-950/20 dark:border-emerald-800/40"
+                        : "border-amber-200/70 bg-amber-50/40 dark:bg-amber-950/20 dark:border-amber-800/40"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        {res.success ? (
+                          <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                        ) : (
+                          <AlertTriangle size={16} className="text-amber-600 shrink-0" />
+                        )}
+                        <span className="font-bold text-gray-900 dark:text-white">
+                          {res.channelName || channelKey}
+                        </span>
+                        <span className="text-[10px] text-gray-400 font-mono" dir="ltr">
+                          {res.channel}
+                        </span>
+                      </div>
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                          res.success
+                            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300"
+                            : "bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300"
+                        }`}
+                      >
+                        {res.success ? "✅ ارسال شد" : "⚠️ خطای ارسال"}
+                      </span>
+                    </div>
+
+                    {res.message && (
+                      <p className="text-[11px] text-gray-600 dark:text-gray-300 leading-relaxed pr-6">
+                        {res.message}
+                      </p>
+                    )}
+
+                    {!res.success && (
+                      <div className="mt-1 pr-6 text-[10px] text-gray-500 dark:text-gray-400 bg-white/60 dark:bg-gray-800/60 p-2 rounded-xl border border-gray-200/50 dark:border-gray-700/50">
+                        💡 <span className="font-bold">راهنمای رفع مشکل:</span> وارد تنظیمات کانال در پیام‌رسان مربوطه شوید، ربات ساخته شده را جستجو کرده و با دسترسی ارسال پیام به عنوان <span className="font-bold">مدیر (Admin)</span> اضافه کنید.
+                      </div>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <div className="text-center text-xs text-gray-400 py-6">گزارشی برای نمایش وجود ندارد.</div>
+              )}
+            </div>
+
+            <div className="pt-3 border-t border-gray-100 dark:border-gray-700 flex justify-end shrink-0">
+              <button
+                type="button"
+                onClick={() => setDeliveryReportModal(null)}
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow"
+              >
+                بستن گزارش
+              </button>
+            </div>
           </div>
         </div>
       )}
