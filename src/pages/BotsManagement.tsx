@@ -413,13 +413,13 @@ export default function BotsManagement() {
         setTestResult({
           id: platform.id,
           success: true,
-          message: `✅ تست ارتباط با سرور ${platform.persianName} موفقیت‌آمیز بود! (${data.message})`
+          message: data.message || `ارتباط با سرور ${platform.persianName} با موفقیت تایید شد.`
         });
       } else {
         setTestResult({
           id: platform.id,
           success: false,
-          message: `⚠️ پاسخ سرور ${platform.persianName}: ${data.message || data.error || "عدم دریافت پاسخ"}`
+          message: data.message || `خطا در برقراری ارتباط با ${platform.persianName}`
         });
       }
     } catch (e: any) {
