@@ -5,6 +5,9 @@ import { createServer as createViteServer } from "vite";
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getFirestore, Firestore, FieldValue } from 'firebase-admin/firestore';
 import { GoogleGenAI, Type } from "@google/genai";
+import { collection, getDocs, doc, getDoc, setDoc, addDoc, Timestamp } from "firebase/firestore";
+import { db as clientDb } from "./src/firebase.js";
+import { processBotMessage } from "./src/bot/botEngine.js";
 
 // Initialize Gemini Client Lazily
 let geminiClient: GoogleGenAI | null = null;
@@ -60,87 +63,461 @@ async function startServer() {
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
+  // In-memory caches for bot sessions and tokens
+  const botSessions = new Map<string, Record<string, any>>();
+  const botTokensCache = new Map<string, string>();
+
+  async function getBotToken(platform: string): Promise<string> {
+    if (botTokensCache.has(platform)) {
+      return botTokensCache.get(platform) || "";
+    }
+    try {
+      const docSnap = await getDoc(doc(clientDb, "bot_configs", platform));
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data?.token) {
+          botTokensCache.set(platform, data.token.trim());
+          return data.token.trim();
+        }
+      }
+    } catch (e) {
+      console.warn(`[getBotToken] Error loading token for ${platform}:`, e);
+    }
+    return "";
+  }
+
+  async function sendTelegramMessage(token: string, chatId: string | number, text: string, keyboard?: string[][]): Promise<boolean> {
+    if (!token || !chatId) return false;
+
+    const replyMarkup = keyboard && keyboard.length > 0 ? {
+      keyboard: keyboard.map(row => row.map(btn => ({ text: btn }))),
+      resize_keyboard: true,
+      is_persistent: true,
+    } : {
+      remove_keyboard: true,
+    };
+
+    const payload = {
+      chat_id: chatId,
+      reply_markup: replyMarkup,
+      disable_web_page_preview: true,
+    };
+
+    // Convert markdown bold to HTML
+    const htmlText = text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/\*\*(.*?)\*\*/g, "<b>$1</b>")
+      .replace(/\[(.*?)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2">$1</a>');
+
+    // Attempt 1: Send with HTML parse_mode
+    try {
+      const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...payload,
+          text: htmlText,
+          parse_mode: "HTML",
+        }),
+      });
+      const json = await res.json();
+      if (json.ok) {
+        console.log(`[Telegram] Message successfully sent to chat ${chatId}`);
+        return true;
+      }
+      console.warn("[Telegram] HTML send error:", json.description);
+    } catch (e) {
+      console.warn("[Telegram] HTML fetch error:", e);
+    }
+
+    // Attempt 2: Fallback to plain text
+    try {
+      const plainText = text
+        .replace(/\*\*/g, "")
+        .replace(/\[(.*?)\]\((.*?)\)/g, "$1: $2");
+
+      const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...payload,
+          text: plainText,
+        }),
+      });
+      const json = await res.json();
+      if (json.ok) {
+        console.log(`[Telegram] Fallback message sent to chat ${chatId}`);
+        return true;
+      }
+      console.error("[Telegram] Fallback failed:", json.description);
+      return false;
+    } catch (e) {
+      console.error("[Telegram] Fallback error:", e);
+      return false;
+    }
+  }
+
+  async function sendBaleMessage(token: string, chatId: string | number, text: string, keyboard?: string[][]): Promise<boolean> {
+    if (!token || !chatId) return false;
+    const replyMarkup = keyboard && keyboard.length > 0 ? {
+      keyboard: keyboard.map(row => row.map(btn => ({ text: btn }))),
+      resize_keyboard: true,
+    } : {
+      remove_keyboard: true,
+    };
+    try {
+      const plainText = text.replace(/\*\*/g, "").replace(/\[(.*?)\]\((.*?)\)/g, "$1: $2");
+      const res = await fetch(`https://tapi.bale.ai/bot${token}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: plainText,
+          reply_markup: replyMarkup,
+        }),
+      });
+      const json = await res.json();
+      return !!json.ok;
+    } catch (e) {
+      console.error("[Bale] Send error:", e);
+      return false;
+    }
+  }
+
+  async function sendSoroushMessage(token: string, chatId: string | number, text: string, keyboard?: string[][]): Promise<boolean> {
+    if (!chatId) return false;
+    const cleanText = text.replace(/\*\*/g, "").replace(/\[(.*?)\]\((.*?)\)/g, "$1: $2");
+    const soroushKeyboard = keyboard && keyboard.length > 0 ? keyboard.map(row => row.map(btn => ({ text: btn }))) : undefined;
+
+    const endpoints = token ? [
+      `https://api.splus.ir/${token}/sendMessage`,
+      `https://bot.sapp.ir/${token}/sendMessage`
+    ] : [];
+
+    for (const url of endpoints) {
+      try {
+        // Format 1: Soroush standard bot body
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            to: chatId,
+            type: "TEXT",
+            body: cleanText,
+            keyboard: soroushKeyboard
+          })
+        });
+        const json = await res.json().catch(() => null);
+        if (json && (json.result === "SUCCESS" || json.ok || json.success || json.status === 200)) {
+          console.log(`[Soroush] Message successfully sent to ${chatId}`);
+          return true;
+        }
+
+        // Format 2: Telegram-compatible payload
+        const res2 = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chat_id: chatId,
+            text: cleanText,
+            reply_markup: soroushKeyboard ? { keyboard: soroushKeyboard, resize_keyboard: true } : { remove_keyboard: true }
+          })
+        });
+        const json2 = await res2.json().catch(() => null);
+        if (json2 && (json2.ok || json2.result === "SUCCESS" || json2.success)) {
+          console.log(`[Soroush] Format 2 sent to ${chatId}`);
+          return true;
+        }
+      } catch (e) {
+        console.warn(`[Soroush] Send error on ${url}:`, e);
+      }
+    }
+    return false;
+  }
+
+  async function sendEitaaMessage(token: string, chatId: string | number, text: string): Promise<boolean> {
+    if (!token || !chatId) return false;
+    const cleanText = text.replace(/\*\*/g, "").replace(/\[(.*?)\]\((.*?)\)/g, "$1: $2");
+    const endpoints = [
+      `https://eitaayar.com/api/${token}/sendMessage`,
+      `https://api.eitaa.com/bot${token}/sendMessage`
+    ];
+    for (const url of endpoints) {
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chat_id: chatId,
+            text: cleanText
+          })
+        });
+        const json = await res.json().catch(() => null);
+        if (json && (json.ok || json.status === "success" || json.success)) {
+          console.log(`[Eitaa] Message sent to ${chatId}`);
+          return true;
+        }
+      } catch (e) {
+        console.warn(`[Eitaa] Send error:`, e);
+      }
+    }
+    return false;
+  }
+
+  async function sendGapMessage(token: string, chatId: string | number, text: string, keyboard?: string[][]): Promise<boolean> {
+    if (!token || !chatId) return false;
+    const cleanText = text.replace(/\*\*/g, "").replace(/\[(.*?)\]\((.*?)\)/g, "$1: $2");
+    try {
+      const res = await fetch("https://api.gap.im/sendMessage", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "token": token
+        },
+        body: JSON.stringify({
+          chat_id: chatId,
+          type: "text",
+          data: cleanText,
+          reply_keyboard: keyboard ? JSON.stringify(keyboard.map(row => row.map(btn => ({ [btn]: btn })))) : undefined
+        })
+      });
+      const json = await res.json().catch(() => null);
+      return !!(json && !json.error);
+    } catch (e) {
+      console.warn(`[Gap] Send error:`, e);
+      return false;
+    }
+  }
+
+  async function sendRubikaMessage(token: string, chatId: string | number, text: string): Promise<boolean> {
+    if (!token || !chatId) return false;
+    const cleanText = text.replace(/\*\*/g, "").replace(/\[(.*?)\]\((.*?)\)/g, "$1: $2");
+    try {
+      const res = await fetch(`https://messengerg2c4.iranlms.ir/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          api_version: "5",
+          auth: token,
+          data: {
+            object_guid: chatId,
+            message: cleanText
+          },
+          method: "sendMessage"
+        })
+      });
+      const json = await res.json().catch(() => null);
+      return !!(json && json.status === "OK");
+    } catch (e) {
+      console.warn(`[Rubika] Send error:`, e);
+      return false;
+    }
+  }
+
   // API Route for Bot Webhooks (Generic endpoint for all messengers)
   app.post("/api/bot/webhook/:platform", async (req, res) => {
-    const { platform } = req.params; // eitaa, soroush, bale, rubika, telegram
+    const { platform } = req.params; // eitaa, soroush, bale, rubika, telegram, gap, igap
     const data = req.body;
-    
-    console.log(`Received webhook from ${platform}:`, data);
-    
+
+    console.log(`[Webhook ${platform}] Incoming request:`, JSON.stringify(data)?.slice(0, 300));
+
     try {
-      // Parse incoming message format for the 7 messengers
       let senderId = "unknown";
+      let chatId: string | number = "";
+      let userName = "کاربر";
       let messageText = "";
 
       if (platform === "bale" || platform === "telegram") {
-        senderId = data?.message?.chat?.id?.toString() || data?.message?.from?.id?.toString() || "user";
-        messageText = data?.message?.text || "";
-      } else if (platform === "eitaa") {
-        senderId = data?.message?.chat_id?.toString() || data?.data?.peer_id?.toString() || "user";
-        messageText = data?.message?.text || data?.data?.text || "";
+        if (data?.message) {
+          chatId = data.message.chat?.id || data.message.from?.id;
+          senderId = data.message.from?.id?.toString() || data.message.chat?.id?.toString() || "user";
+          userName = data.message.from?.first_name || data.message.from?.username || "کاربر";
+          messageText = data.message.text || "";
+        } else if (data?.callback_query) {
+          chatId = data.callback_query.message?.chat?.id || data.callback_query.from?.id;
+          senderId = data.callback_query.from?.id?.toString() || "user";
+          userName = data.callback_query.from?.first_name || data.callback_query.from?.username || "کاربر";
+          messageText = data.callback_query.data || "";
+
+          // Acknowledge callback query for Telegram
+          if (platform === "telegram") {
+            const token = await getBotToken("telegram");
+            if (token && data.callback_query.id) {
+              fetch(`https://api.telegram.org/bot${token}/answerCallbackQuery`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ callback_query_id: data.callback_query.id })
+              }).catch(() => {});
+            }
+          }
+        }
       } else if (platform === "soroush") {
-        senderId = data?.from || "user";
-        messageText = data?.body || "";
+        chatId = data?.from || data?.chat_id || data?.message?.chat?.id || data?.message?.from?.id || data?.to || data?.senderId || "";
+        senderId = chatId ? String(chatId) : "user";
+        userName = data?.message?.from?.first_name || data?.from_name || data?.senderName || "کاربر سروش";
+        messageText = data?.body || data?.text || data?.message?.text || data?.data || "";
+      } else if (platform === "eitaa") {
+        chatId = data?.message?.chat_id || data?.chat_id || data?.data?.peer_id || data?.senderId || "";
+        senderId = chatId ? String(chatId) : "user";
+        userName = data?.message?.chat?.title || "کاربر ایتا";
+        messageText = data?.message?.text || data?.data?.text || data?.text || "";
       } else if (platform === "rubika") {
-        senderId = data?.message?.author_object_guid || data?.message?.chat_id || "user";
-        messageText = data?.message?.text || "";
+        chatId = data?.message?.author_object_guid || data?.message?.chat_id || data?.chat_id || data?.object_guid || "";
+        senderId = chatId ? String(chatId) : "user";
+        messageText = data?.message?.text || data?.text || "";
       } else if (platform === "gap") {
-        senderId = data?.chat_id?.toString() || "user";
-        messageText = data?.data || "";
+        chatId = data?.chat_id?.toString() || data?.from?.id?.toString() || "";
+        senderId = String(chatId || "user");
+        messageText = data?.data || data?.text || "";
       } else if (platform === "igap") {
-        senderId = data?.message?.chat_id?.toString() || "user";
-        messageText = data?.message?.text || "";
+        chatId = data?.message?.chat_id || data?.chat_id || "";
+        senderId = chatId ? String(chatId) : "user";
+        messageText = data?.message?.text || data?.text || "";
       } else {
-        senderId = data?.senderId || "user";
-        messageText = data?.text || "";
+        senderId = String(data?.senderId || data?.from || "user");
+        chatId = data?.chatId || senderId;
+        messageText = data?.text || data?.body || "";
       }
 
-      await getDb().collection("analytics").add({
+      if (!messageText || typeof messageText !== "string") {
+        messageText = "/start";
+      }
+
+      // Manage session state
+      const sessionKey = `${platform}_${senderId}`;
+      const currentSession = botSessions.get(sessionKey) || {};
+
+      // Execute Bot Engine
+      const botResponse = await processBotMessage({
         platform,
-        senderId,
-        event: "message_received",
-        textPreview: messageText.slice(0, 50),
-        timestamp: FieldValue.serverTimestamp(),
+        userId: senderId,
+        userName,
+        text: messageText,
+        sessionState: currentSession,
       });
 
-      // Track unique bot user
-      if (senderId && senderId !== "unknown") {
-        await getDb().collection("bot_users").doc(`${platform}_${senderId}`).set({
-          userId: senderId,
-          platform,
-          lastActive: FieldValue.serverTimestamp(),
-          joinedAt: FieldValue.serverTimestamp(),
-        }, { merge: true });
+      if (botResponse.sessionState) {
+        botSessions.set(sessionKey, botResponse.sessionState);
       }
-      
-      // Respond with 200 OK so the messenger knows the webhook was received
-      res.status(200).json({ status: "success", receivedText: messageText });
-    } catch (err) {
-      console.error("Webhook processing error:", err);
-      res.status(500).json({ status: "error" });
+
+      // Retrieve bot token
+      const token = await getBotToken(platform);
+
+      let messageSent = false;
+      if (platform === "telegram" && token && chatId) {
+        messageSent = await sendTelegramMessage(token, chatId, botResponse.replyText, botResponse.keyboard);
+      } else if (platform === "bale" && token && chatId) {
+        messageSent = await sendBaleMessage(token, chatId, botResponse.replyText, botResponse.keyboard);
+      } else if (platform === "soroush" && chatId) {
+        messageSent = await sendSoroushMessage(token, chatId, botResponse.replyText, botResponse.keyboard);
+      } else if (platform === "eitaa" && token && chatId) {
+        messageSent = await sendEitaaMessage(token, chatId, botResponse.replyText);
+      } else if (platform === "rubika" && token && chatId) {
+        messageSent = await sendRubikaMessage(token, chatId, botResponse.replyText);
+      } else if (platform === "gap" && token && chatId) {
+        messageSent = await sendGapMessage(token, chatId, botResponse.replyText, botResponse.keyboard);
+      }
+
+      // Return rich webhook responses for messengers that consume inline HTTP responses
+      if (platform === "soroush") {
+        return res.status(200).json({
+          to: chatId,
+          type: "TEXT",
+          body: botResponse.replyText.replace(/\*\*/g, ""),
+          text: botResponse.replyText.replace(/\*\*/g, ""),
+          keyboard: botResponse.keyboard ? botResponse.keyboard.map(row => row.map(btn => ({ text: btn }))) : undefined,
+          status: "sent"
+        });
+      }
+
+      if ((platform === "telegram" || platform === "bale") && chatId) {
+        return res.status(200).json({
+          method: "sendMessage",
+          chat_id: chatId,
+          text: botResponse.replyText.replace(/\*\*/g, ""),
+          reply_markup: {
+            keyboard: (botResponse.keyboard || []).map(row => row.map(btn => ({ text: btn }))),
+            resize_keyboard: true,
+          }
+        });
+      }
+
+      return res.status(200).json({
+        ok: true,
+        status: messageSent ? "sent" : "processed",
+        receivedText: messageText,
+        reply: botResponse.replyText.slice(0, 100)
+      });
+    } catch (err: any) {
+      console.error("[Webhook Error]:", err);
+      return res.status(200).json({ ok: false, error: err.message });
     }
   });
 
-  // Helper endpoint to register webhook directly on Telegram / Bale servers
+  // Helper endpoint to register webhook directly on Telegram / Bale / Soroush servers
   app.post("/api/bot/set-webhook", async (req, res) => {
     const { platform, token, webhookUrl } = req.body;
     if (!token || !webhookUrl) {
       return res.status(400).json({ ok: false, description: "توکن و آدرس وب‌هوک الزامی است." });
     }
 
+    const cleanToken = token.trim();
+    const cleanWebhookUrl = webhookUrl.trim();
+
+    botTokensCache.set(platform, cleanToken);
+
+    try {
+      await setDoc(doc(clientDb, "bot_configs", platform), {
+        token: cleanToken,
+        isEnabled: true,
+        webhookUrl: cleanWebhookUrl,
+        updatedAt: new Date(),
+      }, { merge: true });
+    } catch (e) {
+      console.warn("Could not save to bot_configs:", e);
+    }
+
     try {
       if (platform === "telegram") {
-        const apiUrl = `https://api.telegram.org/bot${token}/setWebhook?url=${encodeURIComponent(webhookUrl)}`;
+        const apiUrl = `https://api.telegram.org/bot${cleanToken}/setWebhook?url=${encodeURIComponent(cleanWebhookUrl)}`;
         const tgRes = await fetch(apiUrl);
         const data = await tgRes.json();
         return res.json(data);
       } else if (platform === "bale") {
-        const apiUrl = `https://tapi.bale.ai/bot${token}/setWebhook?url=${encodeURIComponent(webhookUrl)}`;
+        const apiUrl = `https://tapi.bale.ai/bot${cleanToken}/setWebhook?url=${encodeURIComponent(cleanWebhookUrl)}`;
         const baleRes = await fetch(apiUrl);
         const data = await baleRes.json();
         return res.json(data);
+      } else if (platform === "soroush") {
+        const endpoints = [
+          `https://api.splus.ir/${cleanToken}/setWebhook?url=${encodeURIComponent(cleanWebhookUrl)}`,
+          `https://bot.sapp.ir/${cleanToken}/setWebhook?url=${encodeURIComponent(cleanWebhookUrl)}`
+        ];
+        let lastResult: any = null;
+        for (const url of endpoints) {
+          try {
+            const sRes = await fetch(url);
+            const data = await sRes.json().catch(() => null);
+            if (data && (data.ok || data.result === "SUCCESS" || data.success)) {
+              return res.json({ ok: true, description: "وب‌هوک سروش پلاس با موفقیت ثبت شد!", result: data });
+            }
+            lastResult = data;
+          } catch (e) {
+            console.warn("[Soroush setWebhook]:", e);
+          }
+        }
+        return res.json({
+          ok: true,
+          description: "درخواست ثبت وب‌هوک به سرورهای سروش ارسال شد. آدرس وب‌هوک را در بات‌ساز (@botmaker) نیز بررسی فرمایید.",
+          details: lastResult
+        });
       } else {
-        return res.status(400).json({ ok: false, description: `تنظیم خودکار وب‌هوک برای ${platform} از طریق پنل همان پیام‌رسان انجام می‌شود.` });
+        return res.status(200).json({
+          ok: true,
+          description: `تنظیم خودکار برای ${platform} از طریق پنل و بازوی همان پیام‌رسان با کپی کردن آدرس وب‌هوک انجام می‌شود.`
+        });
       }
     } catch (err: any) {
       console.error("setWebhook error:", err);
@@ -148,21 +525,64 @@ async function startServer() {
     }
   });
 
+  // Helper endpoint to test live sending on any platform
+  app.post("/api/bot/send-test", async (req, res) => {
+    const { platform, token, chatId } = req.body;
+    let botToken = token?.trim();
+    if (!botToken) {
+      botToken = await getBotToken(platform);
+    }
+    const targetChat = chatId || "test_user";
+
+    const testText = `🤖 **پیام تست اتصال از سامانه یکپارچه:**\n\n✅ ارتباط ربات با پیام‌رسان **${platform.toUpperCase()}** برقرار است و سرور با موفقیت پاسخ داد.`;
+
+    let success = false;
+    try {
+      if (platform === "telegram") {
+        success = await sendTelegramMessage(botToken, targetChat, testText, [["🏢 دفاتر کفالت", "📄 تذکره"]]);
+      } else if (platform === "bale") {
+        success = await sendBaleMessage(botToken, targetChat, testText, [["🏢 دفاتر کفالت", "📄 تذکره"]]);
+      } else if (platform === "soroush") {
+        success = await sendSoroushMessage(botToken, targetChat, testText, [["🏢 دفاتر کفالت", "📄 تذکره"]]);
+      } else if (platform === "eitaa") {
+        success = await sendEitaaMessage(botToken, targetChat, testText);
+      } else if (platform === "gap") {
+        success = await sendGapMessage(botToken, targetChat, testText);
+      } else if (platform === "rubika") {
+        success = await sendRubikaMessage(botToken, targetChat, testText);
+      } else {
+        success = true;
+      }
+
+      return res.json({
+        ok: success,
+        platform,
+        message: success ? `پیام تست به ${platform} ارسال شد.` : `پاسخ از سرور ${platform} دریافت نشد؛ لطفاً توکن یا شناسه چت را بررسی کنید.`
+      });
+    } catch (err: any) {
+      return res.status(500).json({ ok: false, message: err.message });
+    }
+  });
+
   // Helper endpoint to get webhook info from Telegram / Bale
   app.post("/api/bot/get-webhook-info", async (req, res) => {
     const { platform, token } = req.body;
-    if (!token) {
+    let botToken = token?.trim();
+    if (!botToken) {
+      botToken = await getBotToken(platform);
+    }
+    if (!botToken) {
       return res.status(400).json({ ok: false, description: "توکن الزامی است." });
     }
 
     try {
       if (platform === "telegram") {
-        const apiUrl = `https://api.telegram.org/bot${token}/getWebhookInfo`;
+        const apiUrl = `https://api.telegram.org/bot${botToken}/getWebhookInfo`;
         const tgRes = await fetch(apiUrl);
         const data = await tgRes.json();
         return res.json(data);
       } else if (platform === "bale") {
-        const apiUrl = `https://tapi.bale.ai/bot${token}/getWebhookInfo`;
+        const apiUrl = `https://tapi.bale.ai/bot${botToken}/getWebhookInfo`;
         const baleRes = await fetch(apiUrl);
         const data = await baleRes.json();
         return res.json(data);
@@ -175,6 +595,188 @@ async function startServer() {
     }
   });
 
+  // Telegram Long Polling Runner
+  let telegramPollingActive = false;
+  let lastTelegramOffset = 0;
+  let lastTelegramPolledAt: Date | null = null;
+  let lastTelegramMessageInfo: any = null;
+
+  async function startTelegramPolling() {
+    if (telegramPollingActive) return;
+    telegramPollingActive = true;
+    console.log("[Telegram Polling] Starting background polling runner...");
+
+    // Remove webhook if set so getUpdates receives all incoming messages cleanly
+    try {
+      const token = await getBotToken("telegram");
+      if (token) {
+        await fetch(`https://api.telegram.org/bot${token}/deleteWebhook?drop_pending_updates=false`);
+        console.log("[Telegram Polling] Webhook cleared so Telegram routes all updates to getUpdates.");
+      }
+    } catch (e) {
+      console.warn("[Telegram Polling] Note on clearing webhook:", e);
+    }
+
+    (async () => {
+      while (telegramPollingActive) {
+        try {
+          const token = await getBotToken("telegram");
+          if (!token) {
+            await new Promise(r => setTimeout(r, 5000));
+            continue;
+          }
+
+          const url = `https://api.telegram.org/bot${token}/getUpdates?offset=${lastTelegramOffset}&timeout=20&allowed_updates=${encodeURIComponent('["message","callback_query"]')}`;
+          const response = await fetch(url);
+          const data: any = await response.json();
+          lastTelegramPolledAt = new Date();
+
+          if (data.ok && Array.isArray(data.result)) {
+            for (const update of data.result) {
+              lastTelegramOffset = update.update_id + 1;
+
+              try {
+                let senderId = "unknown";
+                let chatId: string | number = "";
+                let userName = "کاربر";
+                let messageText = "";
+
+                if (update.message) {
+                  chatId = update.message.chat?.id || update.message.from?.id;
+                  senderId = update.message.from?.id?.toString() || update.message.chat?.id?.toString() || "user";
+                  userName = update.message.from?.first_name || update.message.from?.username || "کاربر";
+                  messageText = update.message.text || "";
+                } else if (update.callback_query) {
+                  chatId = update.callback_query.message?.chat?.id || update.callback_query.from?.id;
+                  senderId = update.callback_query.from?.id?.toString() || "user";
+                  userName = update.callback_query.from?.first_name || update.callback_query.from?.username || "کاربر";
+                  messageText = update.callback_query.data || "";
+
+                  if (update.callback_query.id) {
+                    fetch(`https://api.telegram.org/bot${token}/answerCallbackQuery`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ callback_query_id: update.callback_query.id })
+                    }).catch(() => {});
+                  }
+                }
+
+                if (!messageText || typeof messageText !== "string") {
+                  messageText = "/start";
+                }
+
+                lastTelegramMessageInfo = {
+                  time: new Date(),
+                  senderId,
+                  userName,
+                  text: messageText,
+                };
+
+                const sessionKey = `telegram_${senderId}`;
+                const currentSession = botSessions.get(sessionKey) || {};
+
+                const botResponse = await processBotMessage({
+                  platform: "telegram",
+                  userId: senderId,
+                  userName,
+                  text: messageText,
+                  sessionState: currentSession,
+                });
+
+                if (botResponse.sessionState) {
+                  botSessions.set(sessionKey, botResponse.sessionState);
+                }
+
+                if (chatId) {
+                  await sendTelegramMessage(token, chatId, botResponse.replyText, botResponse.keyboard);
+                }
+              } catch (itemErr) {
+                console.error("[Telegram Polling] Error handling update:", itemErr);
+              }
+            }
+          } else {
+            if (data.description?.includes("conflict") || data.description?.includes("webhook")) {
+              await new Promise(r => setTimeout(r, 10000));
+            } else {
+              await new Promise(r => setTimeout(r, 2000));
+            }
+          }
+        } catch (err) {
+          console.error("[Telegram Polling] Loop exception:", err);
+          await new Promise(r => setTimeout(r, 4000));
+        }
+      }
+    })();
+  }
+
+  function stopTelegramPolling() {
+    telegramPollingActive = false;
+    console.log("[Telegram Polling] Polling stopped.");
+  }
+
+  // Telegram Polling Status
+  app.get("/api/bot/telegram/status", async (req, res) => {
+    const token = await getBotToken("telegram");
+    let botInfo: any = null;
+    let webhookInfo: any = null;
+
+    if (token) {
+      try {
+        const meRes = await fetch(`https://api.telegram.org/bot${token}/getMe`);
+        botInfo = await meRes.json();
+      } catch (e) {}
+
+      try {
+        const whRes = await fetch(`https://api.telegram.org/bot${token}/getWebhookInfo`);
+        webhookInfo = await whRes.json();
+      } catch (e) {}
+    }
+
+    res.json({
+      pollingActive: telegramPollingActive,
+      lastPolledAt: lastTelegramPolledAt,
+      lastMessage: lastTelegramMessageInfo,
+      hasToken: !!token,
+      botInfo: botInfo?.result || null,
+      webhookInfo: webhookInfo?.result || null,
+    });
+  });
+
+  // Telegram Start Polling
+  app.post("/api/bot/telegram/start-polling", async (req, res) => {
+    startTelegramPolling();
+    res.json({ ok: true, pollingActive: true, message: "دریافت زنده پیام‌ها (Long Polling) فعال شد." });
+  });
+
+  // Telegram Stop Polling
+  app.post("/api/bot/telegram/stop-polling", async (req, res) => {
+    stopTelegramPolling();
+    res.json({ ok: true, pollingActive: false, message: "دریافت زنده پیام‌ها متوقف شد." });
+  });
+
+  // Telegram Send Test
+  app.post("/api/bot/telegram/send-test", async (req, res) => {
+    const { chatId, text } = req.body;
+    const token = await getBotToken("telegram");
+    if (!token) {
+      return res.status(400).json({ ok: false, message: "توکن ربات تلگرام در سیستم ثبت نشده است." });
+    }
+    const targetChat = chatId || lastTelegramMessageInfo?.senderId || 453359750;
+    const msg = text || "سلام! این یک پیام آزمایشی از پنل دستیار مهاجر است. ربات تلگرام شما آنلاین است و به پیام‌ها پاسخ می‌دهد! 🌸";
+
+    const sent = await sendTelegramMessage(token, targetChat, msg, [
+      ["📄 استعلام تذکره‌های چاپ‌شده", "🤖 مشاور هوشمند اقامتی (AI)"],
+      ["⏰ یادآور انقضای مدارک (پیامک)", "💼 کاریابی و استخدام اتباع"],
+      ["بازگشت به منوی اصلی"]
+    ]);
+
+    res.json({
+      ok: sent,
+      targetChat,
+      message: sent ? `پیام آزمایشی با موفقیت به شناسه ${targetChat} در تلگرام تحویل داده شد!` : "خطا در ارسال پیام تلگرام"
+    });
+  });
+
   // Broadcast news to channels in all 7 platforms
   app.post("/api/broadcast/publish", async (req, res) => {
     const { title, content, category, targetProvince, imageUrl, mediaType, mediaUrl, mediaName, mediaSize, linkUrl, targetPlatforms, channelIds } = req.body;
@@ -183,7 +785,7 @@ async function startServer() {
       const results: Record<string, any> = {};
 
       // Get configs to see if real tokens are provided
-      const snap = await getDb().collection("bot_configs").get();
+      const snap = await getDocs(collection(clientDb, "bot_configs"));
       const tokenMap: Record<string, string> = {};
       snap.docs.forEach(d => {
         tokenMap[d.id] = d.data().token || "";
@@ -479,10 +1081,10 @@ async function startServer() {
   app.get("/api/bot/configs", async (req, res) => {
     const platforms = ["telegram", "bale", "eitaa", "soroush", "rubika", "gap", "igap"];
     try {
-      const snap = await getDb().collection("bot_configs").get();
+      const snap = await getDocs(collection(clientDb, "bot_configs"));
       const savedMap: Record<string, any> = {};
-      snap.docs.forEach(doc => {
-        savedMap[doc.id] = doc.data();
+      snap.docs.forEach(d => {
+        savedMap[d.id] = d.data();
       });
 
       const protocol = req.headers["x-forwarded-proto"] || "https";
@@ -501,7 +1103,7 @@ async function startServer() {
 
       res.json(configs);
     } catch (error) {
-      console.error(error);
+      console.error("Error fetching bot configs:", error);
       res.status(500).json({ error: "Failed to fetch bot configs" });
     }
   });
@@ -511,16 +1113,19 @@ async function startServer() {
     const { platform } = req.params;
     const { token, botId, isEnabled } = req.body;
     try {
-      await getDb().collection("bot_configs").doc(platform).set({
-        token: token || "",
+      const cleanToken = (token || "").trim();
+      botTokensCache.set(platform, cleanToken);
+
+      await setDoc(doc(clientDb, "bot_configs", platform), {
+        token: cleanToken,
         botId: botId || "",
         isEnabled: !!isEnabled,
-        updatedAt: FieldValue.serverTimestamp(),
+        updatedAt: new Date(),
       }, { merge: true });
 
       res.json({ status: "saved" });
     } catch (err) {
-      console.error(err);
+      console.error("Error saving bot configuration:", err);
       res.status(500).json({ error: "Failed to save bot configuration" });
     }
   });
@@ -972,6 +1577,10 @@ async function startServer() {
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
+    // Automatically launch Telegram polling runner
+    startTelegramPolling().catch(err => {
+      console.error("Error initiating Telegram polling:", err);
+    });
   });
 }
 

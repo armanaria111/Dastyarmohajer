@@ -30,9 +30,32 @@ export const MAIN_KEYBOARD = [
   ["📢 آخرین اخبار و بخشنامه‌ها", "⭐ نظرسنجی و پشتیبانی"]
 ];
 
+export function toEnglishDigits(str: any): string {
+  if (str === null || str === undefined) return "";
+  return String(str)
+    .replace(/[۰-۹]/g, (d) => String.fromCharCode(d.charCodeAt(0) - 1776 + 48))
+    .replace(/[٠-٩]/g, (d) => String.fromCharCode(d.charCodeAt(0) - 1632 + 48));
+}
+
+export function toPersianDigits(str: any): string {
+  if (str === null || str === undefined) return "";
+  const persian = ["۰", "۱", "۲", "۳", "۴", "۵", "۶", "۷", "۸", "۹"];
+  return String(str).replace(/[0-9]/g, (d) => persian[parseInt(d, 10)]);
+}
+
+export function normalizeSearchString(str: any): string {
+  if (!str && str !== 0) return "";
+  return toEnglishDigits(String(str))
+    .replace(/[ي]/g, "ی")
+    .replace(/[ك]/g, "ک")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
 function formatClickablePhone(phone: string): string {
   if (!phone) return "ثبت نشده";
-  const cleanPhone = phone.replace(/[^0-9+]/g, "");
+  const cleanPhone = toEnglishDigits(phone).replace(/[^0-9+]/g, "");
   return `[📞 تماس مستقیم: ${phone}](tel:${cleanPhone})`;
 }
 
@@ -443,11 +466,11 @@ export async function processBotMessage(ctx: BotContext): Promise<BotResponse> {
 
   // 8. Date & Age Converter Flow
   if (state.step === "awaiting_date_convert_year") {
-    const rawYear = text.replace(/[^0-9]/g, "");
+    const rawYear = toEnglishDigits(text).replace(/[^0-9]/g, "");
     const yearNum = parseInt(rawYear, 10);
     if (!yearNum || isNaN(yearNum)) {
       return {
-        replyText: `⚠️ لطفاً سال تولد یا تاریخ مورد نظر را به عدد وارد فرمایید (مثال: \`1380\` یا \`1365\`):`,
+        replyText: `⚠️ لطفاً سال تولد یا تاریخ مورد نظر را به عدد وارد فرمایید (مثال: \`1380\` یا \`1365\` یا \`۱۳۸۰\`):`,
         keyboard: [["۱۳۸۰", "۱۳۷۵"], ["۱۳۸۵", "بازگشت به منوی اصلی"]],
         sessionState: { step: "awaiting_date_convert_year" }
       };
@@ -474,11 +497,12 @@ export async function processBotMessage(ctx: BotContext): Promise<BotResponse> {
 
   // 9. Driving Quiz Flow
   if (state.step === "awaiting_driving_quiz_answer") {
-    const isCorrect = text.includes("گزینه ۲") || text.includes("حق تقدم با وسیله داخل میدان") || text.includes("پاسپورت معتبر با اقامت");
+    const normAns = normalizeSearchString(text);
+    const isCorrect = normAns === "2" || normAns.includes("گزینه 2") || normAns.includes("داخل میدان") || normAns.includes("اقامت");
     return {
       replyText: isCorrect
         ? `✅ **پاسخ شما کاملاً صحیح است!** 🌟\n\n💡 **توضیح فنی:** در تمام میادین و تقاطع‌های فاقد چراغ راهنما، حق تقدم عبور با وسیله نقلیه‌ای است که از قبل وارد حریم میدان شده و در حال گردش است.\n\nبرای تمرین ۳۰ سوال کامل و شبیه‌ساز رسمی آیین‌نامه، می‌توانید از بخش «آزمون آیین‌نامه» در صفحه سایت سامانه استفاده فرمایید.`
-        : `❌ **پاسخ نادرست است.**\n\n💡 **پاسخ صحیح:** حق تقدم عبور همواره با خودرویی است که داخل میدان در حال حرکت است.\n\nجهت آمادگی کامل برای آزمون کتبی آیین‌نامه اتباع، شبیه‌ساز ۳۰ سواله آزمون را در سایت امتحان کنید.`,
+        : `❌ **پاسخ نادرست است.**\n\n💡 **پاسخ صحیح:** حق تقدم عبور همواره با خودرویی است که داخل میدان در حال حرکت است (گزینه ۲).\n\nجهت آمادگی کامل برای آزمون کتبی آیین‌نامه اتباع، شبیه‌ساز ۳۰ سواله آزمون را در سایت امتحان کنید.`,
       keyboard: [["سوال بعدی آزمون رانندگی"], ["بازگشت به منوی اصلی"]],
       sessionState: { step: "idle" }
     };
@@ -789,6 +813,12 @@ export async function processBotMessage(ctx: BotContext): Promise<BotResponse> {
     };
   }
 
+  // If user directly typed a number or office code in main menu (e.g. "101", "۱۰۱", "کد ۱۰۱", "دفتر ۱۰۱")
+  const directDigits = toEnglishDigits(text).replace(/[^0-9]/g, "");
+  if (directDigits.length >= 2 && directDigits.length <= 5 && (text.includes("کد") || text.includes("دفتر") || /^[0-9۰-۹\s]+$/.test(text))) {
+    return await handleKefalatOfficeSearch(text);
+  }
+
   // Fallback intelligent response
   return {
     replyText: `متوجه پیام شما نشدم. جهت استفاده از خدمات، لطفاً یکی از گزینه‌های منوی زیر را لمس نمایید:`,
@@ -802,8 +832,10 @@ export async function processBotMessage(ctx: BotContext): Promise<BotResponse> {
 // -------------------------------------------------------------
 
 async function handleKefalatOfficeSearch(queryText: string): Promise<BotResponse> {
-  const q = queryText.trim().toLowerCase();
-  const showAll = q === "نمایش همه دفاتر کفالت" || q === "همه";
+  const rawQ = (queryText || "").trim();
+  const normQ = normalizeSearchString(rawQ);
+  const qDigitsOnly = toEnglishDigits(rawQ).replace(/[^0-9]/g, "");
+  const showAll = normQ === "نمایش همه دفاتر کفالت" || normQ === "همه" || normQ === "لیست";
 
   try {
     const snap = await getDocs(collection(db, "branches"));
@@ -811,13 +843,34 @@ async function handleKefalatOfficeSearch(queryText: string): Promise<BotResponse
 
     let matches = all;
     if (!showAll) {
-      matches = all.filter(b => 
-        (b.name && b.name.toLowerCase().includes(q)) ||
-        (b.code && b.code.toLowerCase().includes(q)) ||
-        (b.provinceCity && b.provinceCity.toLowerCase().includes(q)) ||
-        (b.neighborhood && b.neighborhood.toLowerCase().includes(q)) ||
-        (b.address && b.address.toLowerCase().includes(q))
-      );
+      matches = all.filter(b => {
+        const bCodeEnglish = toEnglishDigits(b.code || "").trim();
+        const bNameNorm = normalizeSearchString(b.name);
+        const bCityNorm = normalizeSearchString(b.provinceCity);
+        const bNeighNorm = normalizeSearchString(b.neighborhood);
+        const bAddrNorm = normalizeSearchString(b.address);
+
+        // 1. Precise office code matching with Persian & English digits (e.g. ۱۰۱, 101, کد ۱۰۱, دفتر ۱۰۱)
+        if (qDigitsOnly && bCodeEnglish) {
+          if (bCodeEnglish === qDigitsOnly || bCodeEnglish.endsWith(qDigitsOnly) || qDigitsOnly.endsWith(bCodeEnglish)) {
+            return true;
+          }
+        }
+
+        // 2. Name contains code or user query
+        if (bNameNorm && qDigitsOnly && bNameNorm.includes(qDigitsOnly)) {
+          return true;
+        }
+
+        // 3. General textual & location search
+        return (
+          bNameNorm.includes(normQ) ||
+          bCityNorm.includes(normQ) ||
+          bNeighNorm.includes(normQ) ||
+          bAddrNorm.includes(normQ) ||
+          (bCodeEnglish && normQ.includes(bCodeEnglish))
+        );
+      });
     }
 
     if (matches.length === 0) {
@@ -859,8 +912,10 @@ async function handleKefalatOfficeSearch(queryText: string): Promise<BotResponse
 }
 
 async function handleDocSearch(queryText: string): Promise<BotResponse> {
-  const q = queryText.trim().toLowerCase();
-  const showAll = q === "نمایش همه مدارک پیدا شده" || q === "همه";
+  const rawQ = (queryText || "").trim();
+  const normQ = normalizeSearchString(rawQ);
+  const qDigits = toEnglishDigits(rawQ).replace(/[^0-9]/g, "");
+  const showAll = normQ === "نمایش همه مدارک پیدا شده" || normQ === "همه" || normQ === "لیست";
 
   try {
     const snap = await getDocs(collection(db, "found_documents"));
@@ -868,12 +923,24 @@ async function handleDocSearch(queryText: string): Promise<BotResponse> {
 
     let matches = all;
     if (!showAll) {
-      matches = all.filter(d => 
-        (d.ownerName && d.ownerName.toLowerCase().includes(q)) ||
-        (d.docNumber && d.docNumber.toLowerCase().includes(q)) ||
-        (d.holdingLocation && d.holdingLocation.toLowerCase().includes(q)) ||
-        (d.docType && d.docType.toLowerCase().includes(q))
-      );
+      matches = all.filter(d => {
+        const ownerNorm = normalizeSearchString(d.ownerName);
+        const docNumNorm = normalizeSearchString(d.docNumber);
+        const docDigits = toEnglishDigits(d.docNumber).replace(/[^0-9]/g, "");
+        const locNorm = normalizeSearchString(d.holdingLocation);
+        const typeNorm = normalizeSearchString(d.docType);
+
+        if (qDigits && docDigits && (docDigits === qDigits || docDigits.includes(qDigits) || qDigits.includes(docDigits))) {
+          return true;
+        }
+
+        return (
+          ownerNorm.includes(normQ) ||
+          docNumNorm.includes(normQ) ||
+          locNorm.includes(normQ) ||
+          typeNorm.includes(normQ)
+        );
+      });
     }
 
     if (matches.length === 0) {
@@ -1074,20 +1141,31 @@ async function handleFaqsList(): Promise<BotResponse> {
 }
 
 async function handleTrackingSearch(codeText: string): Promise<BotResponse> {
-  const code = codeText.trim();
+  const rawCode = (codeText || "").trim();
+  const codeNorm = normalizeSearchString(rawCode);
+  const codeDigits = toEnglishDigits(rawCode).replace(/[^0-9]/g, "");
+
   try {
     const snap = await getDocs(collection(db, "requests"));
     const all = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
 
-    const match = all.find(r => 
-      (r.trackingCode && r.trackingCode.toLowerCase() === code.toLowerCase()) ||
-      r.id.toLowerCase() === code.toLowerCase() ||
-      r.id.toLowerCase().startsWith(code.toLowerCase())
-    );
+    const match = all.find(r => {
+      const trackNorm = normalizeSearchString(r.trackingCode);
+      const trackDigits = toEnglishDigits(r.trackingCode).replace(/[^0-9]/g, "");
+      const idNorm = normalizeSearchString(r.id);
+
+      if (codeDigits && trackDigits && (trackDigits === codeDigits || trackDigits.endsWith(codeDigits))) {
+        return true;
+      }
+      return (
+        (trackNorm && (trackNorm === codeNorm || trackNorm.includes(codeNorm))) ||
+        (idNorm && (idNorm === codeNorm || idNorm.startsWith(codeNorm)))
+      );
+    });
 
     if (!match) {
       return {
-        replyText: `❌ درخواستی با کد رهگیری «${code}» یافت نشد.\n\nلطفاً کد رهگیری خود را به درستی وارد فرمایید:`,
+        replyText: `❌ درخواستی با کد رهگیری «${codeText}» یافت نشد.\n\nلطفاً کد رهگیری خود را به درستی وارد فرمایید:`,
         keyboard: [["بازگشت به منوی اصلی"]],
         sessionState: { step: "awaiting_tracking_code" }
       };
@@ -1152,16 +1230,25 @@ async function handleTazkiraSearch(queryText: string): Promise<BotResponse> {
     } catch (_) {}
 
     const isShowAll = q === "نمایش آخرین تذکره‌های ارسالی" || q === "همه" || q === "لیست";
+    const qDigits = toEnglishDigits(queryText).replace(/[^0-9]/g, "");
+
     const matches = isShowAll
       ? allRecords.slice(0, 6)
       : allRecords.filter(r => {
-          const fn = (r.fullName || "").replace(/[ي]/g, "ی").replace(/[ك]/g, "ک").toLowerCase();
-          const sn = (r.surname || "").replace(/[ي]/g, "ی").replace(/[ك]/g, "ک").toLowerCase();
-          const fa = (r.fatherName || "").replace(/[ي]/g, "ی").replace(/[ك]/g, "ک").toLowerCase();
-          const pr = (r.province || "").toLowerCase();
-          const bx = (r.boxNumber || "").toLowerCase();
-          const row = (r.rowNumber || "").toString();
-          return fn.includes(q) || sn.includes(q) || fa.includes(q) || pr.includes(q) || bx.includes(q) || row === q;
+          const fn = normalizeSearchString(r.fullName);
+          const sn = normalizeSearchString(r.surname);
+          const fa = normalizeSearchString(r.fatherName);
+          const pr = normalizeSearchString(r.province);
+          const bxNorm = normalizeSearchString(r.boxNumber);
+          const bxDigits = toEnglishDigits(r.boxNumber).replace(/[^0-9]/g, "");
+          const rowDigits = toEnglishDigits(r.rowNumber).replace(/[^0-9]/g, "");
+
+          // Check if user queried by box or row number (Persian or English digits)
+          if (qDigits && (bxDigits === qDigits || rowDigits === qDigits)) {
+            return true;
+          }
+
+          return fn.includes(q) || sn.includes(q) || fa.includes(q) || pr.includes(q) || bxNorm.includes(q);
         });
 
     if (matches.length === 0) {
@@ -1341,12 +1428,13 @@ async function handleFeeCalculator(optionText: string): Promise<BotResponse> {
 }
 
 function handleFamilyCountCalculation(countText: string): BotResponse {
-  const count = parseInt(countText.replace(/[^0-9]/g, ""), 10);
+  const cleanDigits = toEnglishDigits(countText).replace(/[^0-9]/g, "");
+  const count = parseInt(cleanDigits, 10);
 
   if (isNaN(count) || count <= 0 || count > 20) {
     return {
-      replyText: `لطفاً تعداد اعضای خانواده را با یک عدد معتبر (مثلاً 4) ارسال فرمایید:`,
-      keyboard: [["1", "2", "3"], ["4", "5", "6"], ["بازگشت به منوی اصلی"]],
+      replyText: `لطفاً تعداد اعضای خانواده را با یک عدد معتبر (مثلاً 4 یا ۴ نفر) ارسال فرمایید:`,
+      keyboard: [["۱", "۲", "۳"], ["۴", "۵", "۶"], ["بازگشت به منوی اصلی"]],
       sessionState: { step: "awaiting_family_count" }
     };
   }

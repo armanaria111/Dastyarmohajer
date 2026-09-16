@@ -12,28 +12,28 @@ export interface ChannelLockConfig {
 
 export const DEFAULT_CHANNEL_LOCKS: Record<string, ChannelLockConfig> = {
   telegram: {
-    enabled: true,
+    enabled: false,
     channelName: "کانال رسمی اطلاع‌رسانی مهاجرین (تلگرام)",
     channelUsername: "@mohajer_news_official",
     channelUrl: "https://t.me/mohajer_news_official",
     lockMessage: "جهت استفاده از خدمات ربات، عضویت در کانال رسمی تلگرام الزامی است."
   },
   bale: {
-    enabled: true,
+    enabled: false,
     channelName: "کانال رسمی خدمات کنسولی و دفاتر کفالت (بله)",
     channelUsername: "@mohajer_consular",
     channelUrl: "https://ble.ir/mohajer_consular",
     lockMessage: "جهت استفاده از خدمات ربات، عضویت در کانال رسمی بله الزامی است."
   },
   eitaa: {
-    enabled: true,
+    enabled: false,
     channelName: "کانال رسمی اخبار مهاجرین (ایتا)",
     channelUsername: "@mohajer_khabar",
     channelUrl: "https://eitaa.com/mohajer_khabar",
     lockMessage: "جهت استفاده از خدمات ربات، عضویت در کانال رسمی ایتا الزامی است."
   },
   rubika: {
-    enabled: true,
+    enabled: false,
     channelName: "کانال مهاجرین در روبیکا",
     channelUsername: "@mohajer_rubika",
     channelUrl: "https://rubika.ir/mohajer_rubika",
@@ -66,10 +66,12 @@ const STORAGE_KEY = "dastyar_channel_locks";
 
 export function getChannelLockConfigs(): Record<string, ChannelLockConfig> {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      return { ...DEFAULT_CHANNEL_LOCKS, ...parsed };
+    if (typeof localStorage !== "undefined") {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        return { ...DEFAULT_CHANNEL_LOCKS, ...parsed };
+      }
     }
   } catch (e) {
     // fallback
@@ -92,7 +94,9 @@ export function getPlatformLockConfig(platform: string): ChannelLockConfig {
 
 export function saveChannelLockConfigs(configs: Record<string, ChannelLockConfig>): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(configs));
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(configs));
+    }
   } catch (e) {
     // fallback
   }
@@ -111,7 +115,9 @@ export async function syncChannelLocksFromCloud(): Promise<Record<string, Channe
     if (snap.exists()) {
       const cloudData = snap.data() as Record<string, ChannelLockConfig>;
       const merged = { ...DEFAULT_CHANNEL_LOCKS, ...cloudData };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+      if (typeof localStorage !== "undefined") {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+      }
       return merged;
     }
   } catch (e) {

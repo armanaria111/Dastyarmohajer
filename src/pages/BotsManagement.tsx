@@ -156,8 +156,76 @@ export default function BotsManagement() {
   const [testResult, setTestResult] = useState<{ id: string; success: boolean; message: string } | null>(null);
   const [activeGuideId, setActiveGuideId] = useState<string | null>(null);
   const [lockSaveSuccess, setLockSaveSuccess] = useState(false);
+  const [telegramStatus, setTelegramStatus] = useState<{
+    pollingActive: boolean;
+    hasToken: boolean;
+    botInfo?: { id: number; username: string; first_name: string };
+    webhookInfo?: { url: string; last_error_message?: string; pending_update_count?: number };
+    lastMessage?: { senderId: string; userName: string; text: string; time: string };
+  } | null>(null);
+  const [sendingTest, setSendingTest] = useState(false);
 
   const baseUrl = window.location.origin;
+
+  const fetchTelegramStatus = async () => {
+    try {
+      const res = await fetch("/api/bot/telegram/status");
+      const data = await res.json();
+      setTelegramStatus(data);
+    } catch (e) {
+      console.warn("Error fetching telegram status:", e);
+    }
+  };
+
+  useEffect(() => {
+    fetchTelegramStatus();
+    const timer = setInterval(fetchTelegramStatus, 8000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const handleStartPolling = async () => {
+    try {
+      const res = await fetch("/api/bot/telegram/start-polling", { method: "POST" });
+      const data = await res.json();
+      fetchTelegramStatus();
+      setTestResult({
+        id: "telegram",
+        success: true,
+        message: data.message || "دریافت زنده فعال شد."
+      });
+    } catch (e: any) {
+      setTestResult({
+        id: "telegram",
+        success: false,
+        message: e.message
+      });
+    }
+  };
+
+  const handleSendTelegramTest = async () => {
+    setSendingTest(true);
+    try {
+      const res = await fetch("/api/bot/telegram/send-test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({})
+      });
+      const data = await res.json();
+      setTestResult({
+        id: "telegram",
+        success: !!data.ok,
+        message: data.message
+      });
+    } catch (e: any) {
+      setTestResult({
+        id: "telegram",
+        success: false,
+        message: `خطا در ارسال تست: ${e.message}`
+      });
+    } finally {
+      setSendingTest(false);
+    }
+  };
 
   useEffect(() => {
     const fetchConfigs = async () => {
@@ -205,17 +273,18 @@ export default function BotsManagement() {
         })
       });
       const data = await res.json();
+      const pName = platformId === "telegram" ? "تلگرام" : platformId === "bale" ? "بله" : platformId === "soroush" ? "سروش پلاس" : platformId;
       if (data.ok) {
         setTestResult({
           id: platformId,
           success: true,
-          message: `وب‌هوک با موفقیت در ${platformId === "telegram" ? "تلگرام" : "بله"} ثبت شد! (${data.description || "Webhook was set"})`
+          message: `وب‌هوک با موفقیت برای ${pName} ثبت شد! (${data.description || "انجام شد"})`
         });
       } else {
         setTestResult({
           id: platformId,
           success: false,
-          message: `خطای ${platformId === "telegram" ? "تلگرام" : "سرور"}: ${data.description || "ناموفق"}`
+          message: `خطای ${pName}: ${data.description || "ناموفق"}`
         });
       }
     } catch (e: any) {
@@ -303,25 +372,51 @@ export default function BotsManagement() {
     }
   };
 
-  const handleTestConnection = (platform: BotPlatform) => {
+  const handleTestConnection = async (platform: BotPlatform) => {
     setTestingId(platform.id);
     const current = configs[platform.id];
-    setTimeout(() => {
+    if (!current?.token?.trim()) {
       setTestingId(null);
-      if (!current?.token) {
+      setTestResult({
+        id: platform.id,
+        success: false,
+        message: `لطفاً ابتدا توکن ربات ${platform.persianName} را وارد فرمایید.`
+      });
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/bot/send-test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          platform: platform.id,
+          token: current.token.trim()
+        })
+      });
+      const data = await res.json();
+      if (data.ok) {
         setTestResult({
           id: platform.id,
-          success: false,
-          message: `لطفاً ابتدا توکن ربات ${platform.persianName} را وارد کنید.`
+          success: true,
+          message: `✅ تست ارتباط با سرور ${platform.persianName} موفقیت‌آمیز بود! (${data.message})`
         });
       } else {
         setTestResult({
           id: platform.id,
-          success: true,
-          message: `ارتباط وب‌هوک با سرور ${platform.persianName} آماده دریافت و پاسخگویی به پیام‌ها است!`
+          success: false,
+          message: `⚠️ پاسخ سرور ${platform.persianName}: ${data.message || data.error || "عدم دریافت پاسخ"}`
         });
       }
-    }, 600);
+    } catch (e: any) {
+      setTestResult({
+        id: platform.id,
+        success: false,
+        message: `خطای شبکه: ${e.message}`
+      });
+    } finally {
+      setTestingId(null);
+    }
   };
 
   const handleFieldChange = (platformId: string, field: "token" | "botId" | "isEnabled", value: any) => {
@@ -732,8 +827,72 @@ export default function BotsManagement() {
                       </div>
                     )}
 
-                    {/* Direct setWebhook Feature for Telegram and Bale */}
-                    {(platform.id === "telegram" || platform.id === "bale") && (
+                    {/* Telegram Real-time Polling & Live Status */}
+                    {platform.id === "telegram" && (
+                      <div className="p-3.5 bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/80 rounded-xl space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="relative flex h-2.5 w-2.5">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                            </span>
+                            <span className="text-xs font-black text-emerald-900 dark:text-emerald-200">
+                              دریافت زنده و بدون وقفه (Long Polling)
+                            </span>
+                          </div>
+                          <span className="text-[10px] bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 font-bold px-2 py-0.5 rounded-md">
+                            {telegramStatus?.pollingActive ? "🟢 آنلاین و متصل" : "در انتظار اتصال"}
+                          </span>
+                        </div>
+
+                        <p className="text-[11px] text-emerald-800/90 dark:text-emerald-300/90 leading-relaxed">
+                          ربات تلگرام شما به صورت زنده و دوطرفه به سیستم متصل است. در این حالت نیازی به دامنه اختصاصی یا تنظیم وب‌هوک خارجی نیست و تمامی پیام‌ها، دکمه‌ها و استعلام‌ها بدون تاخیر پاسخ داده می‌شوند.
+                        </p>
+
+                        {telegramStatus?.botInfo?.username && (
+                          <div className="flex items-center justify-between text-[11px] bg-white/80 dark:bg-slate-900/70 p-2 rounded-lg border border-emerald-100 dark:border-emerald-900">
+                            <span className="text-gray-500 dark:text-gray-400">شناسه ربات متصل:</span>
+                            <span className="font-bold text-emerald-700 dark:text-emerald-400 dir-ltr font-mono">
+                              @{telegramStatus.botInfo.username} ({telegramStatus.botInfo.first_name})
+                            </span>
+                          </div>
+                        )}
+
+                        {telegramStatus?.lastMessage && (
+                          <div className="p-2 bg-white/80 dark:bg-slate-900/70 rounded-lg text-[10px] text-gray-700 dark:text-gray-300 space-y-0.5 border border-emerald-100 dark:border-emerald-900">
+                            <div className="font-bold flex items-center justify-between text-gray-500 dark:text-gray-400">
+                              <span>آخرین فعالیت کاربر:</span>
+                              <span className="font-mono">{new Date(telegramStatus.lastMessage.time).toLocaleTimeString("fa-IR")}</span>
+                            </div>
+                            <div className="text-emerald-800 dark:text-emerald-300 font-medium truncate">
+                              از طرف <b>{telegramStatus.lastMessage.userName}</b>: «{telegramStatus.lastMessage.text}»
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="flex items-center gap-2 pt-1 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={handleSendTelegramTest}
+                            disabled={sendingTest || !cfg.token}
+                            className="flex-1 min-w-[170px] py-2 px-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-xs font-black flex items-center justify-center gap-1.5 shadow-sm transition-all active:scale-95"
+                          >
+                            <Send size={13} className={sendingTest ? "animate-spin" : ""} />
+                            <span>{sendingTest ? "درحال ارسال..." : "ارسال پیام تست به تلگرام من"}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleStartPolling}
+                            className="py-2 px-3 bg-white dark:bg-slate-800 border border-emerald-300 dark:border-emerald-700 hover:bg-emerald-50 dark:hover:bg-slate-700 text-emerald-700 dark:text-emerald-300 rounded-lg text-xs font-bold transition-all"
+                          >
+                            همگام‌سازی اتصال
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Direct setWebhook Feature for Telegram, Bale, and Soroush */}
+                    {(platform.id === "telegram" || platform.id === "bale" || platform.id === "soroush") && (
                       <div className="p-3.5 bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/80 rounded-xl space-y-2.5">
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-black text-blue-900 dark:text-blue-200 flex items-center gap-1.5">
@@ -756,29 +915,33 @@ export default function BotsManagement() {
                           >
                             <Zap size={13} className={settingWebhookId === platform.id ? "animate-spin" : ""} />
                             <span>
-                              {settingWebhookId === platform.id ? "درحال ثبت در تلگرام..." : `⚡️ ثبت خودکار وب‌هوک در ${platform.name}`}
+                              {settingWebhookId === platform.id ? `درحال ثبت در ${platform.persianName}...` : `⚡️ ثبت خودکار وب‌هوک در ${platform.persianName}`}
                             </span>
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => handleCheckWebhookInfo(platform.id)}
-                            disabled={testingId === platform.id || !cfg.token}
-                            className="py-2 px-3 bg-white dark:bg-slate-800 border border-blue-300 dark:border-blue-700 hover:bg-blue-50 dark:hover:bg-slate-700 text-blue-700 dark:text-blue-300 rounded-lg text-xs font-bold transition-all disabled:opacity-50"
-                            title="استعلام آخرین وضعیت وب‌هوک از سرور پیام‌رسان"
-                          >
-                            استعلام وضعیت
-                          </button>
+                          {(platform.id === "telegram" || platform.id === "bale") && (
+                            <button
+                              type="button"
+                              onClick={() => handleCheckWebhookInfo(platform.id)}
+                              disabled={testingId === platform.id || !cfg.token}
+                              className="py-2 px-3 bg-white dark:bg-slate-800 border border-blue-300 dark:border-blue-700 hover:bg-blue-50 dark:hover:bg-slate-700 text-blue-700 dark:text-blue-300 rounded-lg text-xs font-bold transition-all disabled:opacity-50"
+                              title="استعلام آخرین وضعیت وب‌هوک از سرور پیام‌رسان"
+                            >
+                              استعلام وضعیت
+                            </button>
+                          )}
                         </div>
 
                         {/* Direct Browser Link */}
                         {cfg.token && (
                           <div className="pt-2 border-t border-blue-200/60 dark:border-blue-800/50 space-y-1">
                             <div className="flex items-center justify-between text-[10px] text-gray-600 dark:text-gray-400">
-                              <span>لینک مرورگر جهت ثبت دستی:</span>
+                              <span>لینک مرورگر جهت ثبت مستقیم:</span>
                               <a
                                 href={platform.id === "telegram"
                                   ? `https://api.telegram.org/bot${cfg.token.trim()}/setWebhook?url=${encodeURIComponent(webhookUrl)}`
-                                  : `https://tapi.bale.ai/bot${cfg.token.trim()}/setWebhook?url=${encodeURIComponent(webhookUrl)}`}
+                                  : platform.id === "bale"
+                                  ? `https://tapi.bale.ai/bot${cfg.token.trim()}/setWebhook?url=${encodeURIComponent(webhookUrl)}`
+                                  : `https://api.splus.ir/${cfg.token.trim()}/setWebhook?url=${encodeURIComponent(webhookUrl)}`}
                                 target="_blank"
                                 rel="noreferrer"
                                 className="text-blue-600 dark:text-blue-400 font-bold hover:underline inline-flex items-center gap-0.5"
@@ -790,7 +953,9 @@ export default function BotsManagement() {
                             <div className="text-[10px] font-mono bg-white dark:bg-slate-900 border border-blue-100 dark:border-blue-900 rounded p-1.5 text-gray-600 dark:text-gray-300 break-all select-all dir-ltr text-left">
                               {platform.id === "telegram"
                                 ? `https://api.telegram.org/bot${cfg.token.trim()}/setWebhook?url=${webhookUrl}`
-                                : `https://tapi.bale.ai/bot${cfg.token.trim()}/setWebhook?url=${webhookUrl}`}
+                                : platform.id === "bale"
+                                ? `https://tapi.bale.ai/bot${cfg.token.trim()}/setWebhook?url=${webhookUrl}`
+                                : `https://api.splus.ir/${cfg.token.trim()}/setWebhook?url=${webhookUrl}`}
                             </div>
                           </div>
                         )}
